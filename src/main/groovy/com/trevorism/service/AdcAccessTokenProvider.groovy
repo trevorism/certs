@@ -1,8 +1,10 @@
 package com.trevorism.service
 
 import com.google.auth.oauth2.GoogleCredentials
+import groovy.transform.CompileStatic
 import jakarta.inject.Singleton
 
+@CompileStatic
 @Singleton
 class AdcAccessTokenProvider implements AccessTokenProvider {
 

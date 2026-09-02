@@ -69,11 +69,14 @@ class DefaultCertificateRotationServiceTest {
         service.certificateIssuer = issuerReturning(CertificateTestFactory.issued())
     }
 
-    private AppEngineCertificateClient clientExpiring(String expireTime, Integer mappings = 1) {
+    private AppEngineCertificateClient clientExpiring(String expireTime, List<String> visible = null) {
+        List<String> mappings = visible != null ? visible :
+                ["apps/trevorism-action/domainMappings/${CertificateTestFactory.WILDCARD}".toString()]
         return [
                 findByDomain            : { String p, String w -> new AuthorizedCertificate(id: "ae-cert-id") },
                 describe                : { String p, String id ->
-                    new AuthorizedCertificate(id: id, expireTime: expireTime, domainMappingsCount: mappings)
+                    new AuthorizedCertificate(id: id, expireTime: expireTime,
+                            domainMappingsCount: mappings.size(), visibleDomainMappings: mappings)
                 },
                 replaceCertificateMaterial: { String p, String id, String chain, String key ->
                     uploaded = [project: p, id: id, chain: chain, key: key]
@@ -159,11 +162,28 @@ class DefaultCertificateRotationServiceTest {
 
     @Test
     void testAnUnboundCertificateFailsBeforeAnyAcmeWork() {
-        service.appEngineCertificateClient = clientExpiring(Instant.now().plus(5, ChronoUnit.DAYS).toString(), 0)
+        service.appEngineCertificateClient = clientExpiring(Instant.now().plus(5, ChronoUnit.DAYS).toString(), [])
         RotationRun run = service.rotate("cert-1", new RotationRequest())
         assertEquals(RotationState.FAILED.name(), run.outcome)
         assertEquals([], dnsCalls)
         assertNull(uploaded)
+    }
+
+    @Test
+    void testACertificateServedByAnotherProjectIsRejected() {
+        service.appEngineCertificateClient = clientExpiring(Instant.now().plus(5, ChronoUnit.DAYS).toString(),
+                ["apps/trevorism-draw/domainMappings/*.draw.trevorism.com"])
+        RotationRun run = service.rotate("cert-1", new RotationRequest())
+        assertEquals(RotationState.FAILED.name(), run.outcome)
+        assertEquals([], dnsCalls)
+        assertNull(uploaded)
+        assertTrue(run.failureDetail.contains("is not served by"))
+    }
+
+    @Test
+    void testExpectedMappingNameMatchesTheAppEngineFormat() {
+        assertEquals("apps/trevorism-action/domainMappings/*.action.trevorism.com",
+                DefaultCertificateRotationService.expectedMappingName(certificate))
     }
 
     @Test

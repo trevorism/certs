@@ -89,12 +89,9 @@ class DefaultCertificateRotationService implements CertificateRotationService {
         AuthorizedCertificate found = appEngineCertificateClient.findByDomain(certificate.gcpProject, certificate.wildcard)
         AuthorizedCertificate described = appEngineCertificateClient.describe(certificate.gcpProject, found.id)
         described.id = described.id ?: found.id
-        if (!described.domainMappingsCount) {
-            throw new IllegalStateException(
-                    "Certificate ${described.id} in ${certificate.gcpProject} is not bound to any domain mapping")
-        }
+        requireServedByExpectedMapping(described, certificate)
         record(run, RotationState.PREFLIGHT_OK,
-                "certificate ${described.id} serving ${described.domainMappingsCount} mapping(s), expires ${described.expireTime}")
+                "certificate ${described.id} serving ${described.visibleDomainMappings}, expires ${described.expireTime}")
         return described
     }
 
@@ -118,6 +115,18 @@ class DefaultCertificateRotationService implements CertificateRotationService {
                     log.warn("Unable to remove the challenge record for ${certificate.wildcard}: ${e.message}")
                 }
             }
+        }
+    }
+
+    static String expectedMappingName(ManagedCertificate certificate) {
+        return "apps/${certificate.gcpProject}/domainMappings/${certificate.wildcard}"
+    }
+
+    static void requireServedByExpectedMapping(AuthorizedCertificate described, ManagedCertificate certificate) {
+        String expected = expectedMappingName(certificate)
+        if (!described.visibleDomainMappings?.contains(expected)) {
+            throw new IllegalStateException(
+                    "Certificate ${described.id} is not served by ${expected}; it is bound to ${described.visibleDomainMappings}")
         }
     }
 

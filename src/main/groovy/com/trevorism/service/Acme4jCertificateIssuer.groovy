@@ -5,6 +5,7 @@ import com.trevorism.crypto.AcmeKeyCipher
 import com.trevorism.model.AcmeAccountRecord
 import com.trevorism.model.IssuedCertificate
 import com.trevorism.model.RotationRequest
+import groovy.transform.CompileStatic
 import jakarta.inject.Inject
 import jakarta.inject.Singleton
 import org.shredzone.acme4j.AccountBuilder
@@ -23,6 +24,7 @@ import java.security.KeyPair
 import java.time.Duration
 import java.time.Instant
 
+@CompileStatic
 @Singleton
 class Acme4jCertificateIssuer implements CertificateIssuer {
 
@@ -50,7 +52,7 @@ class Acme4jCertificateIssuer implements CertificateIssuer {
         Order order = login.newOrder().domain(wildcard).create()
         Authorization authorization = order.getAuthorizations().first()
         Dns01Challenge challenge = findDnsChallenge(authorization)
-        String recordName = stripTrailingDot(Dns01Challenge.toRRName(authorization.getIdentifier()))
+        String recordName = stripTrailingDot(challenge.getRRName(authorization.getIdentifier()))
 
         try {
             challengeHandler.publish(recordName, challenge.getDigest())
@@ -120,7 +122,7 @@ class Acme4jCertificateIssuer implements CertificateIssuer {
         KeyPairUtils.writeKeyPair(keyPair, writer)
         acmeAccountStore.store(new AcmeAccountRecord(
                 server: acmeServer,
-                accountUrl: login.getAccountLocation().toString(),
+                accountUrl: login.getAccount().getLocation().toString(),
                 encryptedKeyPem: cipher().encrypt(writer.toString()),
                 createdAt: Instant.now().toString()))
         return login
