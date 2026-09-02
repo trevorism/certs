@@ -1,3 +1,7 @@
+## 0.3.3
+
+Alert directly on rotation failure, since the daily error digest only reports a count.
+
 ## 0.3.2
 
 Sweep endpoint that rotates one due cert at a time.
