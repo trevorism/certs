@@ -1,6 +1,9 @@
 runtime: java25
 service: certs
 entrypoint: java -jar certs-all.jar
+basic_scaling:
+  max_instances: 1
+  idle_timeout: 5m
 handlers:
   - url: /.*
     secure: always

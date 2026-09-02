@@ -10,9 +10,9 @@ import org.slf4j.LoggerFactory
 
 @OpenAPIDefinition(
         info = @Info(
-                title = "App",
+                title = "Certs API",
                 version = AppVersion.SEMVER,
-                description = "API",
+                description = "An API to manage lets encrypt certificates for Trevorism.com",
                 contact = @Contact(url = "https://trevorism.com", name = "Trevor Brooks", email = "tbrooks@trevorism.com")
         )
 )
