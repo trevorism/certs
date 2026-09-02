@@ -4,6 +4,7 @@ enum RotationState {
 
     REQUESTED,
     PREFLIGHT_OK,
+    DNS_READY,
     CHALLENGE_SET,
     PROPAGATED,
     VALIDATED,

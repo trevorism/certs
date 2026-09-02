@@ -2,6 +2,7 @@ package com.trevorism.service
 
 import com.trevorism.CertificateTestFactory
 import com.trevorism.model.AuthorizedCertificate
+import com.trevorism.model.DnsRecord
 import com.trevorism.model.IssuedCertificate
 import com.trevorism.model.ManagedCertificate
 import com.trevorism.model.RotationRequest
@@ -14,6 +15,7 @@ import java.time.Instant
 import java.time.temporal.ChronoUnit
 
 import static org.junit.jupiter.api.Assertions.assertEquals
+import static org.junit.jupiter.api.Assertions.assertFalse
 import static org.junit.jupiter.api.Assertions.assertNotNull
 import static org.junit.jupiter.api.Assertions.assertNull
 import static org.junit.jupiter.api.Assertions.assertThrows
@@ -29,9 +31,11 @@ class DefaultCertificateRotationServiceTest {
     private List<String> propagationWaits
     private Map uploaded
     private ManagedCertificate savedCertificate
+    private boolean issuerCalled
 
     @BeforeEach
     void setup() {
+        issuerCalled = false
         certificate = new ManagedCertificate(
                 id: "cert-1", category: "action", wildcard: CertificateTestFactory.WILDCARD,
                 gcpProject: "trevorism-action", probeHost: "alert.action.trevorism.com", enabled: true)
@@ -87,11 +91,25 @@ class DefaultCertificateRotationServiceTest {
     private CertificateIssuer issuerReturning(IssuedCertificate issued) {
         return [
                 issue: { String wildcard, String server, Dns01ChallengeHandler handler ->
+                    issuerCalled = true
                     handler.publish(CHALLENGE_FQDN, "digest-value")
                     handler.cleanup(CHALLENGE_FQDN)
                     return issued
                 }
         ] as CertificateIssuer
+    }
+
+    private ChallengeDnsService dnsServiceLeaving(List<DnsRecord> leftovers, boolean failOnClear = false) {
+        return [
+                setChallenge  : { String label, String digest -> dnsCalls << "set ${label}=${digest}".toString() },
+                clearChallenge: { String label ->
+                    dnsCalls << "clear ${label}".toString()
+                    if (failOnClear) {
+                        throw new IllegalStateException("403 Forbidden from godaddy")
+                    }
+                },
+                readChallenge : { String label -> leftovers }
+        ] as ChallengeDnsService
     }
 
     @Test
@@ -118,7 +136,36 @@ class DefaultCertificateRotationServiceTest {
     @Test
     void testChallengeIsWrittenAndCleanedUpAtTheZoneRelativeLabel() {
         service.rotate("cert-1", new RotationRequest())
-        assertEquals(["set _acme-challenge.action=digest-value", "clear _acme-challenge.action"], dnsCalls)
+        assertEquals(["clear _acme-challenge.action",
+                      "set _acme-challenge.action=digest-value",
+                      "clear _acme-challenge.action"], dnsCalls)
+    }
+
+    @Test
+    void testTheDnsWritePathIsProvenBeforeAnyAcmeOrderExists() {
+        service.challengeDnsService = dnsServiceLeaving([], true)
+        RotationRun run = service.rotate("cert-1", new RotationRequest())
+        assertEquals(RotationState.FAILED.name(), run.outcome)
+        assertFalse(issuerCalled, "no acme order should be created when the dns write path is unreachable")
+        assertEquals(["clear _acme-challenge.action"], dnsCalls)
+        assertNull(uploaded)
+    }
+
+    @Test
+    void testLeftoverRecordsAfterClearingAbortBeforeIssuance() {
+        service.challengeDnsService = dnsServiceLeaving([new DnsRecord(name: "_acme-challenge.action", data: "stale")])
+        RotationRun run = service.rotate("cert-1", new RotationRequest())
+        assertEquals(RotationState.FAILED.name(), run.outcome)
+        assertFalse(issuerCalled)
+        assertTrue(run.failureDetail.contains("still present"))
+    }
+
+    @Test
+    void testAFreshCertificateNeverTouchesDns() {
+        service.appEngineCertificateClient = clientExpiring(Instant.now().plus(60, ChronoUnit.DAYS).toString())
+        service.rotate("cert-1", new RotationRequest())
+        assertEquals([], dnsCalls)
+        assertFalse(issuerCalled)
     }
 
     @Test

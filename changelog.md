@@ -1,3 +1,7 @@
+## 0.3.1
+
+Verify dns on write to stop a round trip.
+
 ## 0.3.0
 
 Fix a bug after bumping the dependencies to the latest versions.

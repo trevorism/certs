@@ -3,6 +3,7 @@ package com.trevorism.service
 import com.trevorism.crypto.IssuedCertificateValidator
 import com.trevorism.crypto.PrivateKeyConverter
 import com.trevorism.model.AuthorizedCertificate
+import com.trevorism.model.DnsRecord
 import com.trevorism.model.IssuedCertificate
 import com.trevorism.model.ManagedCertificate
 import com.trevorism.model.RotationEvent
@@ -61,6 +62,8 @@ class DefaultCertificateRotationService implements CertificateRotationService {
                         "expires ${authorized.expireTime}, more than ${request.minDaysRemaining} days away")
             }
 
+            verifyDnsWritePath(certificate, run)
+
             IssuedCertificate issued = certificateIssuer.issue(
                     certificate.wildcard, request.acmeServer, buildChallengeHandler(certificate, run))
             record(run, RotationState.ISSUED, "serial ${issued.serial} expiring ${issued.notAfter}")
@@ -93,6 +96,17 @@ class DefaultCertificateRotationService implements CertificateRotationService {
         record(run, RotationState.PREFLIGHT_OK,
                 "certificate ${described.id} serving ${described.visibleDomainMappings}, expires ${described.expireTime}")
         return described
+    }
+
+    private void verifyDnsWritePath(ManagedCertificate certificate, RotationRun run) {
+        String label = certificate.challengeLabel
+        challengeDnsService.clearChallenge(label)
+        List<DnsRecord> leftovers = challengeDnsService.readChallenge(label)
+        if (leftovers) {
+            throw new IllegalStateException(
+                    "${leftovers.size()} TXT record(s) still present at ${label} after clearing it")
+        }
+        record(run, RotationState.DNS_READY, "the dns write path is reachable and ${label} is clear")
     }
 
     private Dns01ChallengeHandler buildChallengeHandler(ManagedCertificate certificate, RotationRun run) {
