@@ -101,29 +101,32 @@ class Acme4jCertificateIssuer implements CertificateIssuer {
     }
 
     private Login loginOrRegister(Session session, String acmeServer) {
+        AcmeKeyCipher cipher = cipher()
         AcmeAccountRecord record = acmeAccountStore.load(acmeServer)
         if (record) {
-            KeyPair keyPair = KeyPairUtils.readKeyPair(new StringReader(cipher().decrypt(record.encryptedKeyPem)))
+            KeyPair keyPair = KeyPairUtils.readKeyPair(new StringReader(cipher.decrypt(record.encryptedKeyPem)))
             return session.login(URI.create(record.accountUrl).toURL(), keyPair)
         }
-        return registerAccount(session, acmeServer)
+        return registerAccount(session, acmeServer, cipher)
     }
 
-    private Login registerAccount(Session session, String acmeServer) {
+    private Login registerAccount(Session session, String acmeServer, AcmeKeyCipher cipher) {
         log.info("Registering a new acme account against ${acmeServer}")
         KeyPair keyPair = KeyPairUtils.createKeyPair(KEY_SIZE)
+        StringWriter writer = new StringWriter()
+        KeyPairUtils.writeKeyPair(keyPair, writer)
+        String encryptedKeyPem = cipher.encrypt(writer.toString())
+
         Login login = new AccountBuilder()
                 .agreeToTermsOfService()
                 .addEmail(contactEmail())
                 .useKeyPair(keyPair)
                 .createLogin(session)
 
-        StringWriter writer = new StringWriter()
-        KeyPairUtils.writeKeyPair(keyPair, writer)
         acmeAccountStore.store(new AcmeAccountRecord(
                 server: acmeServer,
                 accountUrl: login.getAccount().getLocation().toString(),
-                encryptedKeyPem: cipher().encrypt(writer.toString()),
+                encryptedKeyPem: encryptedKeyPem,
                 createdAt: Instant.now().toString()))
         return login
     }
