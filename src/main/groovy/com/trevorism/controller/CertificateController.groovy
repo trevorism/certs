@@ -1,5 +1,6 @@
 package com.trevorism.controller
 
+import com.trevorism.model.CertificateVerification
 import com.trevorism.model.ManagedCertificate
 import com.trevorism.model.RotationRequest
 import com.trevorism.model.RotationRun
@@ -7,6 +8,7 @@ import com.trevorism.secure.Permissions
 import com.trevorism.secure.Roles
 import com.trevorism.secure.Secure
 import com.trevorism.service.CertificateRotationService
+import com.trevorism.service.CertificateVerifier
 import com.trevorism.service.ManagedCertificateService
 import io.micronaut.http.MediaType
 import io.micronaut.http.annotation.Body
@@ -25,11 +27,14 @@ class CertificateController {
 
     private final ManagedCertificateService managedCertificateService
     private final CertificateRotationService certificateRotationService
+    private final CertificateVerifier certificateVerifier
 
     CertificateController(ManagedCertificateService managedCertificateService,
-                          CertificateRotationService certificateRotationService) {
+                          CertificateRotationService certificateRotationService,
+                          CertificateVerifier certificateVerifier) {
         this.managedCertificateService = managedCertificateService
         this.certificateRotationService = certificateRotationService
+        this.certificateVerifier = certificateVerifier
     }
 
     @Tag(name = "Certificate Operations")
@@ -54,6 +59,18 @@ class CertificateController {
     @Secure(value = Roles.ADMIN, permissions = Permissions.CREATE)
     ManagedCertificate create(@Body ManagedCertificate certificate) {
         return managedCertificateService.create(certificate)
+    }
+
+    @Tag(name = "Certificate Operations")
+    @Operation(summary = "Checks whether the edge is serving the certificate this service last issued **Secure")
+    @Get(value = "/{id}/verify", produces = MediaType.APPLICATION_JSON)
+    @Secure(value = Roles.USER, permissions = Permissions.READ)
+    CertificateVerification verify(String id) {
+        ManagedCertificate certificate = managedCertificateService.get(id)
+        if (!certificate) {
+            throw new IllegalArgumentException("No managed certificate with id ${id}")
+        }
+        return certificateVerifier.verify(certificate)
     }
 
     @Tag(name = "Certificate Operations")

@@ -44,6 +44,9 @@ class DefaultCertificateRotationService implements CertificateRotationService {
     @Inject
     PropagationChecker propagationChecker
 
+    @Inject
+    FailureReporter failureReporter
+
     @Override
     RotationRun rotate(String certificateId, RotationRequest request) {
         ManagedCertificate certificate = managedCertificateService.get(certificateId)
@@ -76,9 +79,10 @@ class DefaultCertificateRotationService implements CertificateRotationService {
             record(run, RotationState.FORMAT_VERIFIED, "issued by ${issued.issuer}")
 
             String privateKeyPem = PrivateKeyConverter.toPkcs1Pem(issued.keyPair.getPrivate())
+            String displayName = buildDisplayName(certificate, issued)
             appEngineCertificateClient.replaceCertificateMaterial(
-                    certificate.gcpProject, authorized.id, issued.chainPem, privateKeyPem)
-            record(run, RotationState.UPLOADED, "replaced material on ${authorized.id}")
+                    certificate.gcpProject, authorized.id, issued.chainPem, privateKeyPem, displayName)
+            record(run, RotationState.UPLOADED, "replaced material on ${authorized.id} as ${displayName}")
 
             applyResultToCertificate(certificate, authorized, issued, run)
             return finish(run, RotationState.COMPLETED, "rotated to serial ${issued.serial}")
@@ -130,6 +134,12 @@ class DefaultCertificateRotationService implements CertificateRotationService {
                 }
             }
         }
+    }
+
+    static String buildDisplayName(ManagedCertificate certificate, IssuedCertificate issued) {
+        String expiryDate = issued.notAfter?.take(10) ?: "unknown"
+        String serialPrefix = issued.serial?.take(6) ?: "nkn"
+        return "${certificate.category}-star-${expiryDate}-${serialPrefix}"
     }
 
     static String expectedMappingName(ManagedCertificate certificate) {
@@ -191,6 +201,14 @@ class DefaultCertificateRotationService implements CertificateRotationService {
 
     private RotationRun fail(RotationRun run, Exception e) {
         run.failureDetail = "${e.class.simpleName}: ${e.message}"
+        failureReporter.report("Certificate rotation failed for ${run.wildcard}", [
+                wildcard     : run.wildcard,
+                gcpProject   : run.gcpProject,
+                certificateId: run.certificateId,
+                rotationRunId: run.id,
+                acmeServer   : run.acmeServer,
+                reachedState : run.events ? run.events.last().state : RotationState.REQUESTED.name(),
+                failure      : run.failureDetail])
         return finish(run, RotationState.FAILED, run.failureDetail)
     }
 

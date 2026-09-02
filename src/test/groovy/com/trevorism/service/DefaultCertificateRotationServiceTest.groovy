@@ -16,6 +16,7 @@ import java.time.temporal.ChronoUnit
 
 import static org.junit.jupiter.api.Assertions.assertEquals
 import static org.junit.jupiter.api.Assertions.assertFalse
+import static org.junit.jupiter.api.Assertions.assertNotEquals
 import static org.junit.jupiter.api.Assertions.assertNotNull
 import static org.junit.jupiter.api.Assertions.assertNull
 import static org.junit.jupiter.api.Assertions.assertThrows
@@ -32,10 +33,12 @@ class DefaultCertificateRotationServiceTest {
     private Map uploaded
     private ManagedCertificate savedCertificate
     private boolean issuerCalled
+    private List<Map> reportedFailures
 
     @BeforeEach
     void setup() {
         issuerCalled = false
+        reportedFailures = []
         certificate = new ManagedCertificate(
                 id: "cert-1", category: "action", wildcard: CertificateTestFactory.WILDCARD,
                 gcpProject: "trevorism-action", probeHost: "alert.action.trevorism.com", enabled: true)
@@ -69,6 +72,10 @@ class DefaultCertificateRotationServiceTest {
                 awaitPropagation: { String fqdn, String value -> propagationWaits << "${fqdn}=${value}".toString() }
         ] as PropagationChecker
 
+        service.failureReporter = [
+                report: { String message, Map details -> reportedFailures << [message: message, details: details] }
+        ] as FailureReporter
+
         service.appEngineCertificateClient = clientExpiring(Instant.now().plus(5, ChronoUnit.DAYS).toString())
         service.certificateIssuer = issuerReturning(CertificateTestFactory.issued())
     }
@@ -82,8 +89,8 @@ class DefaultCertificateRotationServiceTest {
                     new AuthorizedCertificate(id: id, expireTime: expireTime,
                             domainMappingsCount: mappings.size(), visibleDomainMappings: mappings)
                 },
-                replaceCertificateMaterial: { String p, String id, String chain, String key ->
-                    uploaded = [project: p, id: id, chain: chain, key: key]
+                replaceCertificateMaterial: { String p, String id, String chain, String key, String displayName ->
+                    uploaded = [project: p, id: id, chain: chain, key: key, displayName: displayName]
                 }
         ] as AppEngineCertificateClient
     }
@@ -175,6 +182,22 @@ class DefaultCertificateRotationServiceTest {
     }
 
     @Test
+    void testEveryUploadCarriesAFreshDisplayName() {
+        service.rotate("cert-1", new RotationRequest())
+        assertTrue(uploaded.displayName.startsWith("action-star-"),
+                "the display name must change on every rotation so the console never shows a stale generation")
+        assertNotEquals("action-star-cert-8", uploaded.displayName)
+    }
+
+    @Test
+    void testDisplayNameCarriesTheExpiryAndSerial() {
+        IssuedCertificate issued = CertificateTestFactory.issued()
+        String name = DefaultCertificateRotationService.buildDisplayName(certificate, issued)
+        assertTrue(name.startsWith("action-star-"))
+        assertTrue(name.endsWith(issued.serial.take(6)))
+    }
+
+    @Test
     void testCertificateRecordIsUpdatedAfterUpload() {
         service.rotate("cert-1", new RotationRequest())
         assertNotNull(savedCertificate)
@@ -241,6 +264,26 @@ class DefaultCertificateRotationServiceTest {
         assertEquals(RotationState.FAILED.name(), run.outcome)
         assertNull(uploaded)
         assertTrue(run.failureDetail.contains("issuerIsNotStaging"))
+    }
+
+    @Test
+    void testAFailureIsReportedToTheErrorLedger() {
+        service.certificateIssuer = issuerReturning(
+                CertificateTestFactory.issued(issuerName: CertificateTestFactory.STAGING_CA_NAME))
+        RotationRun run = service.rotate("cert-1", new RotationRequest())
+
+        assertEquals(1, reportedFailures.size())
+        assertTrue(reportedFailures[0].message.contains(CertificateTestFactory.WILDCARD))
+        assertEquals("trevorism-action", reportedFailures[0].details.gcpProject)
+        assertEquals("run-1", reportedFailures[0].details.rotationRunId)
+        assertEquals(RotationState.ISSUED.name(), reportedFailures[0].details.reachedState)
+        assertEquals(RotationState.FAILED.name(), run.outcome)
+    }
+
+    @Test
+    void testASuccessfulRotationReportsNothing() {
+        service.rotate("cert-1", new RotationRequest())
+        assertEquals([], reportedFailures)
     }
 
     @Test

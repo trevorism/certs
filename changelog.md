@@ -1,3 +1,7 @@
+## 0.3.2
+
+Sweep endpoint that rotates one due cert at a time.
+
 ## 0.3.1
 
 Verify dns on write to stop a round trip.

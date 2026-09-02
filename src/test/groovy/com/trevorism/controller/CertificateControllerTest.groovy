@@ -1,14 +1,18 @@
 package com.trevorism.controller
 
+import com.trevorism.model.CertificateVerification
 import com.trevorism.model.ManagedCertificate
 import com.trevorism.model.RotationRequest
 import com.trevorism.model.RotationRun
 import com.trevorism.service.CertificateRotationService
+import com.trevorism.service.CertificateVerifier
 import com.trevorism.service.ManagedCertificateService
 import org.junit.jupiter.api.Test
 
 import static org.junit.jupiter.api.Assertions.assertEquals
 import static org.junit.jupiter.api.Assertions.assertNotNull
+import static org.junit.jupiter.api.Assertions.assertThrows
+import static org.junit.jupiter.api.Assertions.assertTrue
 
 class CertificateControllerTest {
 
@@ -29,7 +33,14 @@ class CertificateControllerTest {
             }
     ] as CertificateRotationService
 
-    private CertificateController controller = new CertificateController(certificateService, rotationService)
+    private CertificateVerifier certificateVerifier = [
+            verify: { ManagedCertificate c ->
+                new CertificateVerification(certificateId: c.id, matches: true, detail: "ok")
+            }
+    ] as CertificateVerifier
+
+    private CertificateController controller =
+            new CertificateController(certificateService, rotationService, certificateVerifier)
 
     @Test
     void testListReturnsEveryCertificate() {
@@ -57,6 +68,18 @@ class CertificateControllerTest {
         assertEquals("run-1", run.id)
         assertEquals("cert-1", run.certificateId)
         assertEquals(true, capturedRequest.force)
+    }
+
+    @Test
+    void testVerifyDelegatesToTheVerifier() {
+        CertificateVerification verification = controller.verify("cert-1")
+        assertEquals("cert-1", verification.certificateId)
+        assertTrue(verification.matches)
+    }
+
+    @Test
+    void testVerifyRejectsAnUnknownCertificate() {
+        assertThrows(IllegalArgumentException) { controller.verify("missing") }
     }
 
     @Test

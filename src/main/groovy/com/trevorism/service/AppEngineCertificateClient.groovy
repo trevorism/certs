@@ -8,5 +8,6 @@ interface AppEngineCertificateClient {
 
     AuthorizedCertificate describe(String gcpProject, String certificateId)
 
-    void replaceCertificateMaterial(String gcpProject, String certificateId, String chainPem, String privateKeyPem)
+    void replaceCertificateMaterial(String gcpProject, String certificateId, String chainPem, String privateKeyPem,
+                                    String displayName)
 }

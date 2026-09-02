@@ -42,10 +42,14 @@ class DefaultAppEngineCertificateClient implements AppEngineCertificateClient {
     }
 
     @Override
-    void replaceCertificateMaterial(String gcpProject, String certificateId, String chainPem, String privateKeyPem) {
-        String url = "${BASE_URL}/${gcpProject}/authorizedCertificates/${certificateId}?updateMask=certificateRawData"
-        String body = gson.toJson([certificateRawData: [publicCertificate: chainPem, privateKey: privateKeyPem]])
-        log.info("Replacing certificate material on ${certificateId} in ${gcpProject}")
+    void replaceCertificateMaterial(String gcpProject, String certificateId, String chainPem, String privateKeyPem,
+                                    String displayName) {
+        String url = "${BASE_URL}/${gcpProject}/authorizedCertificates/${certificateId}" +
+                "?updateMask=certificateRawData,displayName"
+        String body = gson.toJson([
+                displayName       : displayName,
+                certificateRawData: [publicCertificate: chainPem, privateKey: privateKeyPem]])
+        log.info("Replacing certificate material on ${certificateId} in ${gcpProject} as ${displayName}")
         httpClient.patch(url, body, authHeaders())
     }
 
