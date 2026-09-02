@@ -1,0 +1,49 @@
+{
+   "name": "app",
+   "version": "1.0.0",
+   "description": "Trevorism Home",
+   "author": "trevorism <tbrooks@trevorism.com>",
+   "private": true,
+   "type": "module",
+   "scripts": {
+      "build": "vite build",
+      "accept": "vitest run",
+      "dev": "vite",
+      "preview": "vite preview",
+      "format": "prettier --write src/",
+      "test": "vitest",
+      "test:e2e": "cypress run"
+   },
+   "dependencies": {
+      "@tailwindcss/vite": "^4.3.3",
+      "vue": "^3.5.41",
+      "vue-router": "^5.2.0",
+      "vue3-click-away": "^1.2.4",
+      "vuestic-ui": "^1.10.3"
+   },
+   "devDependencies": {
+      "@rushstack/eslint-patch": "^1.16.1",
+      "@trevorism/ui-header-bar": "^5.2.1",
+      "@trevorism/vitest-test-result-events": "^2.0.0",
+      "@vitejs/plugin-vue": "^6.0.8",
+      "@vue/eslint-config-prettier": "^10.2.0",
+      "@vue/test-utils": "^2.4.11",
+      "autoprefixer": "^10.5.4",
+      "axios": "^1.19.0",
+      "cypress": "^15.20.1",
+      "eslint": "^10.8.1",
+      "eslint-plugin-vue": "^10.10.0",
+      "jsdom": "^30.0.1",
+      "prettier": "^3.9.6",
+      "tailwindcss": "^4.3.3",
+      "vite": "^8.2.1",
+      "vitest": "^4.1.10",
+      "vue-cli-plugin-vuestic-ui": "~1.0.11",
+      "vue-eslint-parser": "^10.4.1",
+      "vue3-cookies": "^1.0.6"
+   },
+   "allowScripts": {
+      "vue-demi@0.14.10": true,
+      "cypress@15.20.1": true
+   }
+}
