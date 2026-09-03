@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import CertificateTable from '../src/components/CertificateTable.vue'
+import { redirectToLogin } from '../src/utils/auth.js'
 
 const state = vi.hoisted(() => ({
   failList: false,
+  failStatus: 401,
   certificates: [
     {
       id: '1',
@@ -22,12 +24,17 @@ const state = vi.hoisted(() => ({
   ]
 }))
 
+vi.mock('../src/utils/auth.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  redirectToLogin: vi.fn()
+}))
+
 vi.mock('axios', () => ({
   default: {
     get: vi.fn((url) => {
       if (url === 'api/certificate') {
         return state.failList
-          ? Promise.reject(new Error('unauthorized'))
+          ? Promise.reject({ response: { status: state.failStatus } })
           : Promise.resolve({ data: state.certificates })
       }
       return Promise.resolve({ data: { matches: true, expectedSerial: 'abc' } })
@@ -65,6 +72,8 @@ async function mountTable() {
 describe('CertificateTable', () => {
   beforeEach(() => {
     state.failList = false
+    state.failStatus = 401
+    redirectToLogin.mockClear()
     signIn()
   })
 
@@ -101,17 +110,37 @@ describe('CertificateTable', () => {
 
   it('surfaces an error when the list cannot be loaded', async () => {
     state.failList = true
+    state.failStatus = 500
     const wrapper = await mountTable()
     expect(wrapper.find('.alert').text()).toContain('Unable to load certificates')
     expect(wrapper.findAll('tbody tr')).toHaveLength(0)
+    expect(redirectToLogin).not.toHaveBeenCalled()
   })
 
-  it('asks a signed out visitor to log in and never calls the api', async () => {
+  it('sends an expired session to login instead of showing the table', async () => {
+    state.failList = true
+    const wrapper = await mountTable()
+    expect(redirectToLogin).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain('Redirecting to sign in')
+    expect(wrapper.find('.alert').exists()).toBe(false)
+    expect(wrapper.findAll('tbody tr')).toHaveLength(0)
+  })
+
+  it('tells a rejected account it has no access rather than looping through login', async () => {
+    state.failList = true
+    state.failStatus = 403
+    const wrapper = await mountTable()
+    expect(redirectToLogin).not.toHaveBeenCalled()
+    expect(wrapper.find('.alert').text()).toContain('does not have access')
+  })
+
+  it('sends a signed out visitor to login and never calls the api', async () => {
     signOut()
     const axios = (await import('axios')).default
     axios.get.mockClear()
     const wrapper = await mountTable()
-    expect(wrapper.text()).toContain('Please log in')
+    expect(redirectToLogin).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain('Redirecting to sign in')
     expect(wrapper.findAll('tbody tr')).toHaveLength(0)
     expect(axios.get).not.toHaveBeenCalled()
   })

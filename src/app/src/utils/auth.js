@@ -30,3 +30,19 @@ export function looksLikeAdministrator() {
 export function loginUrlFor(returnUrl) {
   return `${LOGIN_URL}?return_url=${encodeURIComponent(returnUrl)}`
 }
+
+let navigatingToLogin = false
+
+export function redirectToLogin(returnUrl) {
+  if (navigatingToLogin) return
+  navigatingToLogin = true
+  window.location.assign(loginUrlFor(returnUrl))
+}
+
+export function isUnauthorized(error) {
+  return error?.response?.status === 401
+}
+
+export function isForbidden(error) {
+  return error?.response?.status === 403
+}

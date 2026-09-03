@@ -1,3 +1,7 @@
+## 0.3.5
+
+Fix auth bug.
+
 ## 0.3.4
 
 Certificate status page with expiry, edge state, and per-cert rotation.

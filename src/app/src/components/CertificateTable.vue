@@ -10,9 +10,15 @@ import {
   outcomeColor,
   sortByUrgency
 } from '../utils/certStatus.js'
-import { isLoggedIn, looksLikeAdministrator, loginUrlFor } from '../utils/auth.js'
+import {
+  isLoggedIn,
+  looksLikeAdministrator,
+  redirectToLogin,
+  isUnauthorized,
+  isForbidden
+} from '../utils/auth.js'
 
-const authenticated = ref(isLoggedIn())
+const redirecting = ref(false)
 const administrator = ref(looksLikeAdministrator())
 const certificates = ref([])
 const verifications = ref({})
@@ -25,6 +31,13 @@ const lastRun = ref(null)
 const rows = computed(() => sortByUrgency(certificates.value))
 const currentUrl = computed(() => (typeof window === 'undefined' ? '' : window.location.href))
 
+function goToLogin() {
+  redirecting.value = true
+  loading.value = false
+  error.value = ''
+  redirectToLogin(currentUrl.value)
+}
+
 async function load() {
   loading.value = true
   error.value = ''
@@ -33,7 +46,13 @@ async function load() {
     certificates.value = data
     verifyAll()
   } catch (e) {
-    error.value = 'Unable to load certificates. You may need to sign in.'
+    if (isUnauthorized(e)) {
+      goToLogin()
+      return
+    }
+    error.value = isForbidden(e)
+      ? 'Your account does not have access to certificates.'
+      : 'Unable to load certificates. Please try again.'
   } finally {
     loading.value = false
   }
@@ -65,6 +84,10 @@ async function rotate() {
     lastRun.value = data
     await load()
   } catch (e) {
+    if (isUnauthorized(e)) {
+      goToLogin()
+      return
+    }
     error.value = `Rotation of ${certificate.wildcard} could not be started.`
   } finally {
     rotatingId.value = null
@@ -76,8 +99,8 @@ function daysFor(certificate) {
 }
 
 onMounted(() => {
-  if (!authenticated.value) {
-    loading.value = false
+  if (!isLoggedIn()) {
+    goToLogin()
     return
   }
   load()
@@ -88,15 +111,12 @@ onMounted(() => {
   <div class="cert-table">
     <div class="cert-table__header">
       <h2>Wildcard certificates</h2>
-      <va-button v-if="authenticated" preset="secondary" :disabled="loading" @click="load">
+      <va-button v-if="!redirecting" preset="secondary" :disabled="loading" @click="load">
         Refresh
       </va-button>
     </div>
 
-    <div v-if="!authenticated" class="signed-out">
-      <p>Please log in to view the platform's wildcard certificates.</p>
-      <a :href="loginUrlFor(currentUrl)">Sign in</a>
-    </div>
+    <p v-if="redirecting" class="signing-in">Redirecting to sign in…</p>
 
     <template v-else>
     <va-alert v-if="error" color="danger" class="mb-4">{{ error }}</va-alert>
