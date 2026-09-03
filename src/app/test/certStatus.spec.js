@@ -6,7 +6,8 @@ import {
   edgeColor,
   edgeText,
   outcomeColor,
-  sortByUrgency
+  sortByUrgency,
+  sortCertificates
 } from '../src/utils/certStatus.js'
 
 const NOW = Date.parse('2026-09-02T00:00:00Z')
@@ -125,5 +126,87 @@ describe('sortByUrgency', () => {
     ]
     sortByUrgency(input, NOW)
     expect(input.map((c) => c.category)).toEqual(['draw', 'trade'])
+  })
+})
+
+describe('sortCertificates', () => {
+  const certificates = [
+    {
+      id: '1',
+      category: 'trade',
+      wildcard: '*.trade.trevorism.com',
+      gcpProject: 'trevorism-trade',
+      notAfter: '2026-12-01T00:00:00Z',
+      lastOutcome: 'FAILED'
+    },
+    {
+      id: '2',
+      category: 'draw',
+      wildcard: '*.draw.trevorism.com',
+      gcpProject: 'trevorism-draw',
+      notAfter: '2026-09-25T00:00:00Z',
+      lastOutcome: 'COMPLETED'
+    },
+    {
+      id: '3',
+      category: 'action',
+      wildcard: '*.action.trevorism.com',
+      gcpProject: 'trevorism-action',
+      notAfter: null
+    }
+  ]
+
+  const verifications = {
+    '1': { matches: false, expectedSerial: 'abc' },
+    '2': { matches: true, expectedSerial: 'abc' }
+  }
+
+  function categories(options) {
+    return sortCertificates(certificates, { now: NOW, verifications, ...options }).map(
+      (c) => c.category
+    )
+  }
+
+  it('falls back to urgency when no column is chosen', () => {
+    expect(categories({ key: null })).toEqual(['action', 'draw', 'trade'])
+  })
+
+  it('sorts text columns alphabetically and reverses on descending', () => {
+    expect(categories({ key: 'category' })).toEqual(['action', 'draw', 'trade'])
+    expect(categories({ key: 'category', direction: 'desc' })).toEqual(['trade', 'draw', 'action'])
+    expect(categories({ key: 'gcpProject', direction: 'desc' })).toEqual([
+      'trade',
+      'draw',
+      'action'
+    ])
+  })
+
+  it('sorts expiry by days remaining and keeps unknown expiry most urgent', () => {
+    expect(categories({ key: 'expiry' })).toEqual(['action', 'draw', 'trade'])
+    expect(categories({ key: 'expiry', direction: 'desc' })).toEqual(['trade', 'draw', 'action'])
+  })
+
+  it('sorts the edge column from healthy to lagging', () => {
+    expect(categories({ key: 'edge' })).toEqual(['draw', 'action', 'trade'])
+    expect(categories({ key: 'edge', direction: 'desc' })).toEqual(['trade', 'action', 'draw'])
+  })
+
+  it('sorts last rotation with failures last ascending', () => {
+    expect(categories({ key: 'outcome' })).toEqual(['draw', 'action', 'trade'])
+  })
+
+  it('breaks ties on category', () => {
+    const tied = [
+      { id: 'a', category: 'trade', gcpProject: 'shared', notAfter: null },
+      { id: 'b', category: 'draw', gcpProject: 'shared', notAfter: null }
+    ]
+    const sorted = sortCertificates(tied, { key: 'gcpProject', now: NOW })
+    expect(sorted.map((c) => c.category)).toEqual(['draw', 'trade'])
+  })
+
+  it('does not mutate the input', () => {
+    const input = [...certificates]
+    sortCertificates(input, { key: 'category', direction: 'desc', now: NOW })
+    expect(input.map((c) => c.category)).toEqual(['trade', 'draw', 'action'])
   })
 })

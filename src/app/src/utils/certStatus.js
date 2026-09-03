@@ -51,3 +51,44 @@ export function sortByUrgency(certificates, now = Date.now()) {
     return a - b
   })
 }
+
+export function edgeSeverity(verification) {
+  if (!verification) return 1
+  if (verification.matches) return 0
+  if (!verification.expectedSerial) return 2
+  return 3
+}
+
+export function outcomeSeverity(outcome) {
+  if (outcome === 'COMPLETED') return 0
+  if (outcome === 'SKIPPED') return 1
+  if (outcome === 'FAILED') return 3
+  return 2
+}
+
+export function sortValue(certificate, key, { verifications = {}, now = Date.now() } = {}) {
+  if (key === 'expiry') {
+    const days = daysRemaining(certificate.notAfter, now)
+    return days === null ? -Infinity : days
+  }
+  if (key === 'edge') return edgeSeverity(verifications[certificate.id])
+  if (key === 'outcome') return outcomeSeverity(certificate.lastOutcome)
+  return certificate[key] ?? ''
+}
+
+export function sortCertificates(
+  certificates,
+  { key = null, direction = 'asc', verifications = {}, now = Date.now() } = {}
+) {
+  if (!key) return sortByUrgency(certificates, now)
+  const factor = direction === 'desc' ? -1 : 1
+  return [...certificates].sort((left, right) => {
+    const a = sortValue(left, key, { verifications, now })
+    const b = sortValue(right, key, { verifications, now })
+    if (a !== b) {
+      const compared = typeof a === 'string' ? a.localeCompare(b) : a - b
+      return compared * factor
+    }
+    return (left.category ?? '').localeCompare(right.category ?? '')
+  })
+}

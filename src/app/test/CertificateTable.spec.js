@@ -3,25 +3,27 @@ import { mount, flushPromises } from '@vue/test-utils'
 import CertificateTable from '../src/components/CertificateTable.vue'
 import { redirectToLogin } from '../src/utils/auth.js'
 
+const CERTIFICATES = [
+  {
+    id: '1',
+    category: 'draw',
+    wildcard: '*.draw.trevorism.com',
+    gcpProject: 'trevorism-draw',
+    notAfter: '2099-12-01T00:00:00Z',
+    lastOutcome: 'COMPLETED'
+  },
+  {
+    id: '2',
+    category: 'testing',
+    wildcard: '*.testing.trevorism.com',
+    gcpProject: 'trevorism-testing'
+  }
+]
+
 const state = vi.hoisted(() => ({
   failList: false,
   failStatus: 401,
-  certificates: [
-    {
-      id: '1',
-      category: 'draw',
-      wildcard: '*.draw.trevorism.com',
-      gcpProject: 'trevorism-draw',
-      notAfter: '2099-12-01T00:00:00Z',
-      lastOutcome: 'COMPLETED'
-    },
-    {
-      id: '2',
-      category: 'testing',
-      wildcard: '*.testing.trevorism.com',
-      gcpProject: 'trevorism-testing'
-    }
-  ]
+  certificates: []
 }))
 
 vi.mock('../src/utils/auth.js', async (importOriginal) => ({
@@ -69,10 +71,21 @@ async function mountTable() {
   return wrapper
 }
 
+function headerFor(wrapper, label) {
+  return wrapper
+    .findAll('thead button')
+    .find((button) => button.text().startsWith(label))
+}
+
+function categoryOrder(wrapper) {
+  return wrapper.findAll('tbody tr').map((row) => row.findAll('td')[0].text())
+}
+
 describe('CertificateTable', () => {
   beforeEach(() => {
     state.failList = false
     state.failStatus = 401
+    state.certificates = CERTIFICATES
     redirectToLogin.mockClear()
     signIn()
   })
@@ -155,5 +168,53 @@ describe('CertificateTable', () => {
   it('offers rotation to an administrator', async () => {
     const wrapper = await mountTable()
     expect(wrapper.text()).toContain('Rotate')
+  })
+
+  it('sorts by a column when its header is clicked', async () => {
+    const wrapper = await mountTable()
+    await headerFor(wrapper, 'Category').trigger('click')
+    expect(categoryOrder(wrapper)).toEqual(['draw', 'testing'])
+    expect(wrapper.text()).toContain('Sorted by category, ascending')
+  })
+
+  it('reverses the sort on a second click', async () => {
+    const wrapper = await mountTable()
+    await headerFor(wrapper, 'Category').trigger('click')
+    await headerFor(wrapper, 'Category').trigger('click')
+    expect(categoryOrder(wrapper)).toEqual(['testing', 'draw'])
+    expect(wrapper.text()).toContain('Sorted by category, descending')
+  })
+
+  it('returns to the urgency order on a third click', async () => {
+    const wrapper = await mountTable()
+    const header = headerFor(wrapper, 'Category')
+    await header.trigger('click')
+    await header.trigger('click')
+    await header.trigger('click')
+    expect(categoryOrder(wrapper)).toEqual(['testing', 'draw'])
+    expect(wrapper.text()).toContain('Sorted by urgency')
+  })
+
+  it('switching columns starts a fresh ascending sort', async () => {
+    const wrapper = await mountTable()
+    await headerFor(wrapper, 'Category').trigger('click')
+    await headerFor(wrapper, 'Category').trigger('click')
+    await headerFor(wrapper, 'Wildcard').trigger('click')
+    expect(categoryOrder(wrapper)).toEqual(['draw', 'testing'])
+    expect(wrapper.text()).toContain('Sorted by wildcard, ascending')
+  })
+
+  it('marks the sorted column for assistive technology', async () => {
+    const wrapper = await mountTable()
+    expect(wrapper.findAll('thead th[aria-sort="none"]')).toHaveLength(6)
+    await headerFor(wrapper, 'Category').trigger('click')
+    expect(wrapper.findAll('thead th').at(0).attributes('aria-sort')).toBe('ascending')
+  })
+
+  it('tells an administrator when nothing is tracked', async () => {
+    state.certificates = []
+    const wrapper = await mountTable()
+    expect(wrapper.findAll('tbody tr')).toHaveLength(0)
+    expect(wrapper.text()).toContain('No certificates are being tracked yet')
   })
 })
