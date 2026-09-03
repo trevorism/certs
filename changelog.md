@@ -1,3 +1,11 @@
+## 0.3.7
+
+Acceptance coverage for the certificate inventory, the rotation audit trail and the security posture.
+The glue moved to the package root the acceptance plugin actually scans, so the suite runs instead of
+silently reporting success with zero scenarios. Every scenario is read-only: nothing issues a
+certificate, writes dns or uploads material, so the suite spends no acme or godaddy quota however
+often it runs.
+
 ## 0.3.6
 
 Distinguish a failed edge check from a stale edge, so a probe that cannot connect no longer alerts as

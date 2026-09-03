@@ -72,6 +72,9 @@ dependencies {
 
     testImplementation 'com.trevorism:test-result-events:0.3.0'
     acceptanceImplementation 'io.cucumber:cucumber-groovy:6.10.4'
+    acceptanceImplementation 'com.trevorism:secure-http-utils:3.3.0'
+    acceptanceImplementation 'com.google.code.gson:gson:2.14.0'
+    acceptanceImplementation 'ch.qos.logback:logback-classic:1.5.6'
 }
 
 application {
