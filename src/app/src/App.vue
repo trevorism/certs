@@ -1,11 +1,11 @@
 <script setup>
 import MenuBar from '@trevorism/ui-header-bar'
-import SplashPage from './components/SplashPage.vue'
+import CertificateTable from './components/CertificateTable.vue'
 </script>
 
 <template>
   <menu-bar></menu-bar>
-  <splash-page msg="Hello World"></splash-page>
+  <certificate-table></certificate-table>
 </template>
 
 <style scoped></style>

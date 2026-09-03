@@ -1,3 +1,7 @@
+## 0.3.4
+
+Certificate status page with expiry, edge state, and per-cert rotation.
+
 ## 0.3.3
 
 Alert directly on rotation failure, since the daily error digest only reports a count.
