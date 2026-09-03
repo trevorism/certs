@@ -57,9 +57,14 @@ class DefaultCertificateRotationService implements CertificateRotationService {
             throw new IllegalStateException("The managed certificate ${certificate.wildcard} is disabled")
         }
 
+        RotationRequest.requireKnownAcmeServer(request.acmeServer)
+
         RotationRun run = startRun(certificate, request)
+        AuthorizedCertificate authorized = null
+        IssuedCertificate issued = null
+        boolean uploaded = false
         try {
-            AuthorizedCertificate authorized = preflight(certificate, run)
+            authorized = preflight(certificate, run)
             if (!request.force && hasEnoughLifeLeft(authorized, request.minDaysRemaining)) {
                 return finish(run, RotationState.SKIPPED,
                         "expires ${authorized.expireTime}, more than ${request.minDaysRemaining} days away")
@@ -67,7 +72,7 @@ class DefaultCertificateRotationService implements CertificateRotationService {
 
             verifyDnsWritePath(certificate, run)
 
-            IssuedCertificate issued = certificateIssuer.issue(
+            issued = certificateIssuer.issue(
                     certificate.wildcard, request.acmeServer, buildChallengeHandler(certificate, run))
             record(run, RotationState.ISSUED, "serial ${issued.serial} expiring ${issued.notAfter}")
 
@@ -80,15 +85,37 @@ class DefaultCertificateRotationService implements CertificateRotationService {
 
             String privateKeyPem = PrivateKeyConverter.toPkcs1Pem(issued.keyPair.getPrivate())
             String displayName = buildDisplayName(certificate, issued)
+            uploaded = true
             appEngineCertificateClient.replaceCertificateMaterial(
                     certificate.gcpProject, authorized.id, issued.chainPem, privateKeyPem, displayName)
             record(run, RotationState.UPLOADED, "replaced material on ${authorized.id} as ${displayName}")
 
-            applyResultToCertificate(certificate, authorized, issued, run)
+            applyResultToCertificate(certificate, authorized, issued, run, RotationState.COMPLETED)
             return finish(run, RotationState.COMPLETED, "rotated to serial ${issued.serial}")
         } catch (Exception e) {
             log.error("Rotation of ${certificate.wildcard} failed", e)
+            recordUploadedMaterialAfterFailure(certificate, authorized, issued, run, uploaded)
             return fail(run, e)
+        }
+    }
+
+    private void recordUploadedMaterialAfterFailure(ManagedCertificate certificate, AuthorizedCertificate authorized,
+                                                    IssuedCertificate issued, RotationRun run, boolean uploaded) {
+        if (!uploaded) {
+            return
+        }
+        try {
+            applyResultToCertificate(certificate, authorized, issued, run, RotationState.FAILED)
+            log.warn("Rotation of ${certificate.wildcard} failed at or after upload; serial ${issued.serial} may be live and has been recorded so the sweep does not reissue it")
+        } catch (Exception e) {
+            log.error("Unable to record the uploaded material for ${certificate.wildcard}", e)
+            failureReporter.report("Certificate material was uploaded but could not be recorded for ${certificate.wildcard}", [
+                    wildcard     : certificate.wildcard,
+                    gcpProject   : certificate.gcpProject,
+                    certificateId: certificate.id,
+                    rotationRunId: run.id,
+                    liveSerial   : issued?.serial,
+                    failure      : e.message])
         }
     }
 
@@ -213,7 +240,7 @@ class DefaultCertificateRotationService implements CertificateRotationService {
     }
 
     private void applyResultToCertificate(ManagedCertificate certificate, AuthorizedCertificate authorized,
-                                          IssuedCertificate issued, RotationRun run) {
+                                          IssuedCertificate issued, RotationRun run, RotationState outcome) {
         run.newSerial = issued.serial
         run.newNotAfter = issued.notAfter
         certificate.appEngineCertificateId = authorized.id
@@ -221,7 +248,7 @@ class DefaultCertificateRotationService implements CertificateRotationService {
         certificate.notAfter = issued.notAfter
         certificate.lastRotationRunId = run.id
         certificate.lastRotatedAt = Instant.now().toString()
-        certificate.lastOutcome = RotationState.COMPLETED.name()
+        certificate.lastOutcome = outcome.name()
         managedCertificateService.update(certificate.id, certificate)
     }
 }

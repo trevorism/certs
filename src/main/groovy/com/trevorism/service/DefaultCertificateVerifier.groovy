@@ -35,6 +35,8 @@ class DefaultCertificateVerifier implements CertificateVerifier {
                     "${certificate.probeHost} is serving the expected certificate" :
                     "${certificate.probeHost} is still serving a different certificate"
         } catch (Exception e) {
+            verification.probeFailed = true
+            verification.observedSerial = null
             verification.detail = "unable to read a certificate from ${certificate.probeHost}: ${e.message}"
         }
         return verification

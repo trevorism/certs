@@ -46,11 +46,18 @@ class Acme4jCertificateIssuer implements CertificateIssuer {
 
     @Override
     IssuedCertificate issue(String wildcard, String acmeServer, Dns01ChallengeHandler challengeHandler) {
-        Session session = new Session(directoryFor(acmeServer))
-        Login login = loginOrRegister(session, acmeServer)
+        String server = RotationRequest.canonicalAcmeServer(acmeServer)
+        Session session = new Session(directoryFor(server))
+        Login login = loginOrRegister(session, server)
 
         Order order = login.newOrder().domain(wildcard).create()
-        Authorization authorization = order.getAuthorizations().first()
+        Authorization authorization = requireSingleAuthorization(order, wildcard)
+
+        if (authorization.getStatus() == Status.VALID) {
+            log.info("Reusing the still valid authorization for ${wildcard}, no challenge is needed")
+            return executeOrder(order, wildcard)
+        }
+
         Dns01Challenge challenge = findDnsChallenge(authorization)
         String recordName = stripTrailingDot(challenge.getRRName(authorization.getIdentifier()))
 
@@ -58,15 +65,26 @@ class Acme4jCertificateIssuer implements CertificateIssuer {
             challengeHandler.publish(recordName, challenge.getDigest())
             challenge.trigger()
             requireValid(authorization.waitForCompletion(authorizationTimeout), "authorization for ${wildcard}")
-
-            KeyPair domainKeyPair = KeyPairUtils.createKeyPair(KEY_SIZE)
-            order.execute(domainKeyPair)
-            requireValid(order.waitForCompletion(orderTimeout), "order for ${wildcard}")
-
-            return toIssuedCertificate(order.getCertificate(), domainKeyPair)
+            return executeOrder(order, wildcard)
         } finally {
             challengeHandler.cleanup(recordName)
         }
+    }
+
+    private IssuedCertificate executeOrder(Order order, String wildcard) {
+        KeyPair domainKeyPair = KeyPairUtils.createKeyPair(KEY_SIZE)
+        order.execute(domainKeyPair)
+        requireValid(order.waitForCompletion(orderTimeout), "order for ${wildcard}")
+        return toIssuedCertificate(order.getCertificate(), domainKeyPair)
+    }
+
+    static Authorization requireSingleAuthorization(Order order, String wildcard) {
+        List<Authorization> authorizations = order.getAuthorizations()
+        if (authorizations.size() != 1) {
+            throw new IllegalStateException(
+                    "The order for ${wildcard} returned ${authorizations.size()} authorizations; this service only fulfills one")
+        }
+        return authorizations.first()
     }
 
     static String directoryFor(String acmeServer) {

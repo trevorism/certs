@@ -43,7 +43,7 @@ class DefaultCertificateSweepService implements CertificateSweepService {
     @Override
     SweepResult sweep() {
         SweepResult result = new SweepResult(startedAt: Instant.now().toString())
-        List<ManagedCertificate> enabled = managedCertificateService.list().findAll { it.enabled }
+        List<ManagedCertificate> enabled = listEnabled()
         result.enabledCount = enabled.size()
 
         List<Map> due = findDueCertificates(enabled, result)
@@ -55,9 +55,13 @@ class DefaultCertificateSweepService implements CertificateSweepService {
             result.notes << "no certificate is inside the ${MIN_DAYS_REMAINING} day renewal window"
         }
 
-        verifyEdge(enabled, result)
+        verifyEdge(result.rotatedCertificateId ? listEnabled() : enabled, result)
         result.finishedAt = Instant.now().toString()
         return result
+    }
+
+    private List<ManagedCertificate> listEnabled() {
+        return managedCertificateService.list().findAll { it.enabled }
     }
 
     private List<Map> findDueCertificates(List<ManagedCertificate> enabled, SweepResult result) {
@@ -134,25 +138,55 @@ class DefaultCertificateSweepService implements CertificateSweepService {
 
     private void verifyEdge(List<ManagedCertificate> enabled, SweepResult result) {
         enabled.each { ManagedCertificate certificate ->
-            CertificateVerification verification = certificateVerifier.verify(certificate)
-            result.verifications << verification
-            if (verification.matches || !certificate.serial || withinDriftGrace(certificate)) {
-                return
+            try {
+                result.verifications << inspectEdge(certificate)
+            } catch (Exception e) {
+                String note = "unable to verify the edge for ${certificate.wildcard}: ${e.message}"
+                log.warn(note)
+                result.notes << note
+                failureReporter.report("Cannot verify the edge for ${certificate.wildcard}", [
+                        wildcard : certificate.wildcard,
+                        probeHost: certificate.probeHost,
+                        failure  : e.message])
             }
-            failureReporter.report("Edge is not serving the latest certificate for ${certificate.wildcard}", [
-                    wildcard      : certificate.wildcard,
-                    probeHost     : certificate.probeHost,
-                    expectedSerial: verification.expectedSerial,
-                    observedSerial: verification.observedSerial,
-                    lastRotatedAt : certificate.lastRotatedAt])
         }
+    }
+
+    private CertificateVerification inspectEdge(ManagedCertificate certificate) {
+        CertificateVerification verification = certificateVerifier.verify(certificate)
+        if (verification.probeFailed) {
+            reportProbeFailure(certificate, verification)
+            return verification
+        }
+        if (!verification.drifting || withinDriftGrace(certificate)) {
+            return verification
+        }
+        failureReporter.report("Edge is not serving the latest certificate for ${certificate.wildcard}", [
+                wildcard      : certificate.wildcard,
+                probeHost     : certificate.probeHost,
+                expectedSerial: verification.expectedSerial,
+                observedSerial: verification.observedSerial,
+                lastRotatedAt : certificate.lastRotatedAt])
+        return verification
+    }
+
+    private void reportProbeFailure(ManagedCertificate certificate, CertificateVerification verification) {
+        log.warn("Unable to probe the edge for ${certificate.wildcard}: ${verification.detail}")
+        failureReporter.report("Unable to probe the edge for ${certificate.wildcard}", [
+                wildcard : certificate.wildcard,
+                probeHost: certificate.probeHost,
+                failure  : verification.detail])
     }
 
     static boolean withinDriftGrace(ManagedCertificate certificate) {
         if (!certificate.lastRotatedAt) {
             return false
         }
-        return Instant.parse(certificate.lastRotatedAt)
-                .isAfter(Instant.now().minus(DRIFT_GRACE_HOURS, ChronoUnit.HOURS))
+        try {
+            return Instant.parse(certificate.lastRotatedAt)
+                    .isAfter(Instant.now().minus(DRIFT_GRACE_HOURS, ChronoUnit.HOURS))
+        } catch (Exception ignored) {
+            return false
+        }
     }
 }

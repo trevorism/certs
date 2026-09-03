@@ -63,4 +63,29 @@ class DefaultCertificateVerifierTest {
         assertFalse(result.matches)
         assertTrue(result.detail.contains("unable to read a certificate"))
     }
+
+    @Test
+    void testAnUnreachableHostIsAProbeFailureRatherThanDrift() {
+        CertificateVerification result =
+                verifierSeeing { String host -> throw new IOException("connection refused") }.verify(certificate())
+        assertTrue(result.probeFailed)
+        assertFalse(result.drifting, "a failed probe says nothing about what the edge is serving")
+        assertFalse(result.conclusive)
+        assertNull(result.observedSerial)
+    }
+
+    @Test
+    void testAStaleEdgeCertificateIsDrift() {
+        CertificateVerification result =
+                verifierSeeing { String host -> "054111f02fca3516b4ff23024486b7558bf3" }.verify(certificate())
+        assertTrue(result.drifting)
+        assertFalse(result.probeFailed)
+    }
+
+    @Test
+    void testACertificateWithNoRecordedSerialIsNotDrifting() {
+        CertificateVerification result = verifierSeeing { String host -> SERIAL }.verify(certificate(null))
+        assertFalse(result.drifting)
+        assertFalse(result.conclusive)
+    }
 }

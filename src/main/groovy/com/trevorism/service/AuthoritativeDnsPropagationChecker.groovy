@@ -3,6 +3,7 @@ package com.trevorism.service
 import jakarta.inject.Singleton
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import org.xbill.DNS.AAAARecord
 import org.xbill.DNS.ARecord
 import org.xbill.DNS.DClass
 import org.xbill.DNS.Flags
@@ -84,7 +85,18 @@ class AuthoritativeDnsPropagationChecker implements PropagationChecker {
     }
 
     List<String> resolveAuthoritativeNameserverAddresses(String zone) {
-        return resolveNameserverHostnames(zone).collectMany { resolveAddresses(it) }.unique()
+        List<String> hostnames = resolveNameserverHostnames(zone)
+        if (!hostnames) {
+            return []
+        }
+        Map<String, List<String>> addressesByHostname = hostnames.collectEntries { [(it): resolveAddresses(it)] }
+        List<String> unresolved = addressesByHostname.findAll { !it.value }.keySet().toList()
+        if (unresolved) {
+            throw new IllegalStateException(
+                    "Cannot resolve an address for the authoritative nameserver(s) ${unresolved} of ${zone}; " +
+                            "checking propagation against the remaining ${hostnames.size() - unresolved.size()} would be incomplete")
+        }
+        return addressesByHostname.values().flatten().unique() as List<String>
     }
 
     List<String> resolveNameserverHostnames(String zone) {
@@ -93,8 +105,17 @@ class AuthoritativeDnsPropagationChecker implements PropagationChecker {
     }
 
     List<String> resolveAddresses(String hostname) {
+        return resolveIpv4Addresses(hostname) + resolveIpv6Addresses(hostname)
+    }
+
+    List<String> resolveIpv4Addresses(String hostname) {
         Record[] records = new Lookup(hostname, Type.A).run()
         return records?.collect { ((ARecord) it).getAddress().getHostAddress() } ?: []
+    }
+
+    List<String> resolveIpv6Addresses(String hostname) {
+        Record[] records = new Lookup(hostname, Type.AAAA).run()
+        return records?.collect { ((AAAARecord) it).getAddress().getHostAddress() } ?: []
     }
 
     private static void pause(long millis) {

@@ -22,6 +22,7 @@ export function expiryText(days) {
 
 export function edgeText(verification) {
   if (!verification) return 'checking'
+  if (verification.probeFailed) return 'check failed'
   if (verification.matches) return 'serving'
   if (!verification.expectedSerial) return 'never rotated'
   return 'lagging'
@@ -29,6 +30,7 @@ export function edgeText(verification) {
 
 export function edgeColor(verification) {
   if (!verification) return 'secondary'
+  if (verification.probeFailed) return 'danger'
   if (verification.matches) return 'success'
   if (!verification.expectedSerial) return 'secondary'
   return 'warning'
@@ -45,7 +47,7 @@ export function sortByUrgency(certificates, now = Date.now()) {
   return [...certificates].sort((left, right) => {
     const a = daysRemaining(left.notAfter, now)
     const b = daysRemaining(right.notAfter, now)
-    if (a === b) return left.category.localeCompare(right.category)
+    if (a === b) return (left.category ?? '').localeCompare(right.category ?? '')
     if (a === null) return -1
     if (b === null) return 1
     return a - b
@@ -54,6 +56,7 @@ export function sortByUrgency(certificates, now = Date.now()) {
 
 export function edgeSeverity(verification) {
   if (!verification) return 1
+  if (verification.probeFailed) return 4
   if (verification.matches) return 0
   if (!verification.expectedSerial) return 2
   return 3

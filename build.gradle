@@ -17,7 +17,7 @@ buildscript {
     }
     dependencies {
         classpath 'com.google.cloud.tools:appengine-gradle-plugin:2.8.7'
-        classpath 'com.trevorism:gradle-acceptance-plugin:3.0.0'
+        classpath 'com.trevorism:gradle-acceptance-plugin:3.0.2'
         classpath 'com.trevorism:gradle-trevorism-versioning-plugin:1.0.0'
     }
 }

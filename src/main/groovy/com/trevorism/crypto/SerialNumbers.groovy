@@ -6,8 +6,10 @@ class SerialNumbers {
         if (!serial) {
             return null
         }
-        String stripped = serial.toLowerCase().replaceAll("[^0-9a-f]", "").replaceFirst("^0+", "")
-        return stripped ?: "0"
+        String trimmed = serial.trim().toLowerCase()
+        String sign = trimmed.startsWith("-") ? "-" : ""
+        String stripped = trimmed.replaceAll("[^0-9a-f]", "").replaceFirst("^0+", "")
+        return stripped ? "${sign}${stripped}" : "0"
     }
 
     static boolean same(String left, String right) {

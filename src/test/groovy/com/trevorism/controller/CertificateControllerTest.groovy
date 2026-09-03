@@ -59,7 +59,37 @@ class CertificateControllerTest {
 
     @Test
     void testCreateRegistersACertificate() {
-        assertEquals("created", controller.create(new ManagedCertificate(category: "draw")).id)
+        assertEquals("created", controller.create(registrable()).id)
+    }
+
+    @Test
+    void testCreateRejectsACertificateWithNoAppEngineCertificateId() {
+        ManagedCertificate certificate = registrable()
+        certificate.appEngineCertificateId = null
+        assertThrows(IllegalArgumentException) { controller.create(certificate) }
+    }
+
+    @Test
+    void testCreateRejectsAWildcardThatDoesNotMatchTheCategory() {
+        ManagedCertificate certificate = registrable()
+        certificate.wildcard = "*.action.trevorism.com"
+        assertThrows(IllegalArgumentException) { controller.create(certificate) }
+    }
+
+    @Test
+    void testCreateRejectsAnUnparseableTimestamp() {
+        ManagedCertificate certificate = registrable()
+        certificate.lastRotatedAt = "yesterday"
+        assertThrows(IllegalArgumentException) { controller.create(certificate) }
+    }
+
+    private static ManagedCertificate registrable() {
+        return new ManagedCertificate(
+                category: "draw",
+                wildcard: "*.draw.trevorism.com",
+                gcpProject: "trevorism-draw",
+                appEngineCertificateId: "43823065",
+                probeHost: "timeline.draw.trevorism.com")
     }
 
     @Test

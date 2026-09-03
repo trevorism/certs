@@ -8,6 +8,15 @@ class CertificateVerification {
     String expectedSerial
     String observedSerial
     boolean matches
+    boolean probeFailed
     String detail
     String checkedAt
+
+    boolean isConclusive() {
+        return !probeFailed && expectedSerial
+    }
+
+    boolean isDrifting() {
+        return isConclusive() && !matches
+    }
 }

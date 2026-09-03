@@ -4,6 +4,7 @@ import {
   expiryColor,
   expiryText,
   edgeColor,
+  edgeSeverity,
   edgeText,
   outcomeColor,
   sortByUrgency,
@@ -85,6 +86,23 @@ describe('edge status', () => {
     expect(edgeText({ matches: false, expectedSerial: 'abc' })).toBe('lagging')
     expect(edgeColor({ matches: false, expectedSerial: 'abc' })).toBe('warning')
   })
+
+  it('reports a failed probe as its own state rather than as never rotated', () => {
+    const verification = { matches: false, probeFailed: true, expectedSerial: 'abc' }
+    expect(edgeText(verification)).toBe('check failed')
+    expect(edgeColor(verification)).toBe('danger')
+  })
+
+  it('does not claim never rotated when the probe failed before a serial was known', () => {
+    expect(edgeText({ matches: false, probeFailed: true })).toBe('check failed')
+  })
+
+  it('sorts an unverifiable edge above a merely lagging one', () => {
+    expect(edgeSeverity({ matches: false, probeFailed: true })).toBeGreaterThan(
+      edgeSeverity({ matches: false, expectedSerial: 'abc' })
+    )
+    expect(edgeSeverity({ matches: true, expectedSerial: 'abc' })).toBe(0)
+  })
 })
 
 describe('outcomeColor', () => {
@@ -126,6 +144,11 @@ describe('sortByUrgency', () => {
     ]
     sortByUrgency(input, NOW)
     expect(input.map((c) => c.category)).toEqual(['draw', 'trade'])
+  })
+
+  it('survives a certificate with no category', () => {
+    const sorted = sortByUrgency([{ notAfter: null }, { category: 'testing', notAfter: null }], NOW)
+    expect(sorted).toHaveLength(2)
   })
 })
 

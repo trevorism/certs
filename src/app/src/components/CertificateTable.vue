@@ -29,6 +29,7 @@ const rotatingId = ref(null)
 const lastRun = ref(null)
 const sortKey = ref(null)
 const sortDirection = ref('asc')
+const verifyBatch = ref(0)
 
 const columns = [
   { key: 'category', label: 'Category' },
@@ -108,17 +109,30 @@ async function load() {
 }
 
 function verifyAll() {
+  const batch = ++verifyBatch.value
   verifications.value = {}
   certificates.value.forEach((certificate) => {
     axios
       .get(`api/certificate/${certificate.id}/verify`)
       .then(({ data }) => {
-        verifications.value = { ...verifications.value, [certificate.id]: data }
+        recordVerification(batch, certificate.id, data)
       })
-      .catch(() => {
-        verifications.value = { ...verifications.value, [certificate.id]: { matches: false } }
+      .catch((e) => {
+        if (isUnauthorized(e)) {
+          goToLogin()
+          return
+        }
+        recordVerification(batch, certificate.id, {
+          probeFailed: true,
+          detail: 'the verification request did not complete'
+        })
       })
   })
+}
+
+function recordVerification(batch, certificateId, verification) {
+  if (batch !== verifyBatch.value) return
+  verifications.value = { ...verifications.value, [certificateId]: verification }
 }
 
 async function rotate() {
@@ -137,7 +151,9 @@ async function rotate() {
       goToLogin()
       return
     }
-    error.value = `Rotation of ${certificate.wildcard} could not be started.`
+    error.value = isForbidden(e)
+      ? `Your account is not allowed to rotate ${certificate.wildcard}.`
+      : `Rotation of ${certificate.wildcard} could not be started.`
   } finally {
     rotatingId.value = null
   }
@@ -250,7 +266,11 @@ onMounted(() => {
     >
       <p v-if="confirming">
         This issues a new production certificate for {{ confirming.wildcard }} and replaces it on
-        {{ confirming.gcpProject }}. It takes about 90 seconds, and the edge can take an hour to catch up.
+        {{ confirming.gcpProject }}. It takes about 90 seconds, and the edge can take several hours to
+        catch up.
+      </p>
+      <p v-if="confirming" class="cert-table__muted">
+        Certificates with more than 30 days left are left alone and the run reports SKIPPED.
       </p>
     </va-modal>
     </template>

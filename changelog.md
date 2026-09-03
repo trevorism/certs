@@ -1,3 +1,10 @@
+## 0.3.6
+
+Distinguish a failed edge check from a stale edge, so a probe that cannot connect no longer alerts as
+drift or renders as "never rotated". Record the issued serial when a rotation fails at or after upload,
+retry a rotation whose acme authorization is still valid, validate certificate registrations, and reject
+an unrecognized acmeServer instead of registering a second acme account against it.
+
 ## 0.3.5
 
 Fix auth bug.

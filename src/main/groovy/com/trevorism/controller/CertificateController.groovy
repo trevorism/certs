@@ -2,6 +2,7 @@ package com.trevorism.controller
 
 import com.trevorism.model.CertificateVerification
 import com.trevorism.model.ManagedCertificate
+import com.trevorism.model.ManagedCertificateValidator
 import com.trevorism.model.RotationRequest
 import com.trevorism.model.RotationRun
 import com.trevorism.secure.Permissions
@@ -58,6 +59,7 @@ class CertificateController {
     @Post(value = "/", produces = MediaType.APPLICATION_JSON, consumes = MediaType.APPLICATION_JSON)
     @Secure(value = Roles.ADMIN, permissions = Permissions.CREATE)
     ManagedCertificate create(@Body ManagedCertificate certificate) {
+        ManagedCertificateValidator.validateForRegistration(certificate)
         return managedCertificateService.create(certificate)
     }
 

@@ -106,6 +106,34 @@ class DefaultCertificateRotationServiceTest {
         ] as CertificateIssuer
     }
 
+    private RotationRunService runServiceFailingAt(RotationState state) {
+        return [
+                create: { RotationRun r -> r.id = "run-1"; r },
+                update: { String id, RotationRun r ->
+                    if (r.outcome == state.name()) {
+                        throw new IllegalStateException("the datastore rejected the run update")
+                    }
+                    r
+                },
+                get   : { String id -> null },
+                list  : { [] }
+        ] as RotationRunService
+    }
+
+    private AppEngineCertificateClient clientFailingOnUpload() {
+        List<String> mappings = ["apps/trevorism-action/domainMappings/${CertificateTestFactory.WILDCARD}".toString()]
+        return [
+                findByDomain              : { String p, String w -> new AuthorizedCertificate(id: "ae-cert-id") },
+                describe                  : { String p, String id ->
+                    new AuthorizedCertificate(id: id, expireTime: Instant.now().plus(5, ChronoUnit.DAYS).toString(),
+                            domainMappingsCount: mappings.size(), visibleDomainMappings: mappings)
+                },
+                replaceCertificateMaterial: { String p, String id, String chain, String key, String displayName ->
+                    throw new IllegalStateException("read timed out waiting for app engine")
+                }
+        ] as AppEngineCertificateClient
+    }
+
     private ChallengeDnsService dnsServiceLeaving(List<DnsRecord> leftovers, boolean failOnClear = false) {
         return [
                 setChallenge  : { String label, String digest -> dnsCalls << "set ${label}=${digest}".toString() },
@@ -284,6 +312,50 @@ class DefaultCertificateRotationServiceTest {
     void testASuccessfulRotationReportsNothing() {
         service.rotate("cert-1", new RotationRequest())
         assertEquals([], reportedFailures)
+    }
+
+    @Test
+    void testAFailureAfterUploadStillRecordsTheLiveSerial() {
+        IssuedCertificate issued = CertificateTestFactory.issued()
+        service.certificateIssuer = issuerReturning(issued)
+        service.rotationRunService = runServiceFailingAt(RotationState.UPLOADED)
+        RotationRun run = service.rotate("cert-1", new RotationRequest())
+
+        assertEquals(RotationState.FAILED.name(), run.outcome)
+        assertNotNull(uploaded, "the material did reach app engine")
+        assertNotNull(savedCertificate,
+                "leaving the old serial recorded makes the sweep reissue a certificate that is already live")
+        assertEquals(issued.serial, savedCertificate.serial)
+        assertNotNull(savedCertificate.lastRotatedAt)
+        assertEquals(RotationState.FAILED.name(), savedCertificate.lastOutcome)
+    }
+
+    @Test
+    void testAFailedUploadCallAlsoRecordsTheSerialBecauseItMayHaveLanded() {
+        service.appEngineCertificateClient = clientFailingOnUpload()
+        RotationRun run = service.rotate("cert-1", new RotationRequest())
+
+        assertEquals(RotationState.FAILED.name(), run.outcome)
+        assertNotNull(savedCertificate, "an upload that times out may still have applied, so record it and let the edge audit decide")
+        assertEquals(RotationState.FAILED.name(), savedCertificate.lastOutcome)
+    }
+
+    @Test
+    void testAFailureBeforeUploadLeavesTheRecordAlone() {
+        service.certificateIssuer = issuerReturning(
+                CertificateTestFactory.issued(issuerName: CertificateTestFactory.STAGING_CA_NAME))
+        service.rotate("cert-1", new RotationRequest())
+        assertNull(savedCertificate, "nothing reached the edge, so the recorded serial is still correct")
+    }
+
+    @Test
+    void testAnUnknownAcmeServerIsRejectedBeforeAnyWork() {
+        assertThrows(IllegalArgumentException) {
+            service.rotate("cert-1", new RotationRequest(acmeServer: "prod"))
+        }
+        assertEquals([], dnsCalls)
+        assertFalse(issuerCalled)
+        assertNull(uploaded)
     }
 
     @Test

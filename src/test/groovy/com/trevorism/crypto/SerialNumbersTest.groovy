@@ -54,4 +54,20 @@ class SerialNumbersTest {
     void testAllZeroSerialCollapsesToZeroRatherThanEmpty() {
         assertEquals("0", SerialNumbers.normalize("0000"))
     }
+
+    @Test
+    void testANegativeSerialDoesNotMatchItsPositiveTwin() {
+        assertFalse(SerialNumbers.same("-1a2b", "1a2b"),
+                "BigInteger.toString(16) emits a sign for a negative der serial; stripping it invents a match")
+    }
+
+    @Test
+    void testNormalizeKeepsTheSign() {
+        assertEquals("-a1b2", SerialNumbers.normalize("-000A1B2"))
+    }
+
+    @Test
+    void testSurroundingWhitespaceIsIgnored() {
+        assertTrue(SerialNumbers.same("  1a2b  ", "1A2B"))
+    }
 }

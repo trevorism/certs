@@ -13,10 +13,13 @@ import java.time.Instant
 import java.time.temporal.ChronoUnit
 
 import static org.junit.jupiter.api.Assertions.assertEquals
+import static org.junit.jupiter.api.Assertions.assertNotNull
 import static org.junit.jupiter.api.Assertions.assertNull
 import static org.junit.jupiter.api.Assertions.assertTrue
 
 class DefaultCertificateSweepServiceTest {
+
+    private static final String ROTATED_SERIAL = "bbb"
 
     private DefaultCertificateSweepService service
     private List<ManagedCertificate> registry
@@ -24,9 +27,18 @@ class DefaultCertificateSweepServiceTest {
     private List<String> rotated
     private List<Map> reported
     private Map<String, Boolean> edgeMatches
+    private Map<String, Boolean> edgeProbeFails
 
     private static String daysOut(int days) {
         return Instant.now().plus(days, ChronoUnit.DAYS).toString()
+    }
+
+    private static ManagedCertificate rotatedCopy(ManagedCertificate certificate) {
+        ManagedCertificate refreshed = cert(certificate.category, certificate.id)
+        refreshed.serial = ROTATED_SERIAL
+        refreshed.lastRotatedAt = Instant.now().toString()
+        refreshed.lastOutcome = "COMPLETED"
+        return refreshed
     }
 
     private static ManagedCertificate cert(String category, String id) {
@@ -43,6 +55,7 @@ class DefaultCertificateSweepServiceTest {
         rotated = []
         reported = []
         edgeMatches = [:].withDefault { true }
+        edgeProbeFails = [:].withDefault { false }
 
         service = new DefaultCertificateSweepService()
         service.managedCertificateService = [
@@ -66,14 +79,18 @@ class DefaultCertificateSweepServiceTest {
         service.certificateRotationService = [
                 rotate: { String id, RotationRequest request ->
                     rotated << id
+                    registry = registry.collect { it.id == id ? rotatedCopy(it) : it }
                     new RotationRun(id: "run-${id}", certificateId: id, outcome: "COMPLETED")
                 }
         ] as CertificateRotationService
 
         service.certificateVerifier = [
                 verify: { ManagedCertificate c ->
+                    boolean probeFailed = edgeProbeFails[c.category]
                     new CertificateVerification(certificateId: c.id, wildcard: c.wildcard,
-                            probeHost: c.probeHost, expectedSerial: c.serial, matches: edgeMatches[c.category])
+                            probeHost: c.probeHost, expectedSerial: c.serial, probeFailed: probeFailed,
+                            matches: probeFailed ? false : edgeMatches[c.category],
+                            detail: probeFailed ? "unable to read a certificate from ${c.probeHost}" : "checked")
                 }
         ] as CertificateVerifier
 
@@ -183,6 +200,39 @@ class DefaultCertificateSweepServiceTest {
     @Test
     void testDriftGraceIsFalseWithoutARotationTimestamp() {
         assertEquals(false, DefaultCertificateSweepService.withinDriftGrace(new ManagedCertificate()))
+    }
+
+    @Test
+    void testAFailedProbeIsNotReportedAsDrift() {
+        registry.find { it.category == "draw" }.lastRotatedAt = Instant.now().minus(48, ChronoUnit.HOURS).toString()
+        edgeProbeFails["draw"] = true
+        service.sweep()
+        assertTrue(reported.every { !it.message.contains("Edge is not serving") },
+                "an unreachable probe host is not evidence that the edge is stale")
+    }
+
+    @Test
+    void testAFailedProbeIsReportedAsItsOwnFailure() {
+        edgeProbeFails["draw"] = true
+        service.sweep()
+        assertTrue(reported.any { it.message.contains("Unable to probe the edge") && it.message.contains("draw") })
+    }
+
+    @Test
+    void testAnUnparseableLastRotatedAtDoesNotStopTheSweep() {
+        registry.find { it.category == "action" }.lastRotatedAt = "yesterday"
+        SweepResult result = service.sweep()
+        assertEquals(3, result.verifications.size(), "one bad timestamp must not skip the remaining certificates")
+        assertNotNull(result.finishedAt)
+    }
+
+    @Test
+    void testTheEdgeIsVerifiedAgainstThePostRotationState() {
+        expiryByProject["trevorism-draw"] = daysOut(10)
+        SweepResult result = service.sweep()
+        CertificateVerification verification = result.verifications.find { it.certificateId == "2" }
+        assertEquals(ROTATED_SERIAL, verification.expectedSerial,
+                "verifying against the pre-rotation snapshot compares the edge to a serial that is already superseded")
     }
 
     @Test

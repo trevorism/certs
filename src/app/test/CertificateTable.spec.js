@@ -23,6 +23,9 @@ const CERTIFICATES = [
 const state = vi.hoisted(() => ({
   failList: false,
   failStatus: 401,
+  failVerify: false,
+  deferVerify: false,
+  pendingVerify: [],
   certificates: []
 }))
 
@@ -38,6 +41,12 @@ vi.mock('axios', () => ({
         return state.failList
           ? Promise.reject({ response: { status: state.failStatus } })
           : Promise.resolve({ data: state.certificates })
+      }
+      if (state.deferVerify) {
+        return new Promise((resolve, reject) => state.pendingVerify.push({ resolve, reject }))
+      }
+      if (state.failVerify) {
+        return Promise.reject({ response: { status: 500 } })
       }
       return Promise.resolve({ data: { matches: true, expectedSerial: 'abc' } })
     }),
@@ -85,6 +94,9 @@ describe('CertificateTable', () => {
   beforeEach(() => {
     state.failList = false
     state.failStatus = 401
+    state.failVerify = false
+    state.deferVerify = false
+    state.pendingVerify = []
     state.certificates = CERTIFICATES
     redirectToLogin.mockClear()
     signIn()
@@ -216,5 +228,33 @@ describe('CertificateTable', () => {
     const wrapper = await mountTable()
     expect(wrapper.findAll('tbody tr')).toHaveLength(0)
     expect(wrapper.text()).toContain('No certificates are being tracked yet')
+  })
+
+  it('shows a failed verification as check failed rather than never rotated', async () => {
+    state.failVerify = true
+    const wrapper = await mountTable()
+    expect(wrapper.text()).toContain('check failed')
+    expect(wrapper.text()).not.toContain('never rotated')
+  })
+
+  it('does not let a stale verification batch overwrite a newer one', async () => {
+    state.deferVerify = true
+    const wrapper = await mountTable()
+    const staleBatch = state.pendingVerify.splice(0)
+    expect(staleBatch).toHaveLength(2)
+
+    const refresh = wrapper.findAll('button').find((button) => button.text() === 'Refresh')
+    await refresh.trigger('click')
+    await flushPromises()
+    const freshBatch = state.pendingVerify.splice(0)
+    expect(freshBatch).toHaveLength(2)
+
+    freshBatch.forEach((call) => call.resolve({ data: { matches: true, expectedSerial: 'new' } }))
+    await flushPromises()
+    staleBatch.forEach((call) => call.resolve({ data: { matches: false, probeFailed: true } }))
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('check failed')
+    expect(wrapper.text()).toContain('serving')
   })
 })
