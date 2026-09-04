@@ -1,17 +1,14 @@
+## 0.4.0
+
+Modify the urgent constant to be 15 days, grace period for checking cert propagation to 25 hours.
+
 ## 0.3.7
 
 Acceptance coverage for the certificate inventory, the rotation audit trail and the security posture.
-The glue moved to the package root the acceptance plugin actually scans, so the suite runs instead of
-silently reporting success with zero scenarios. Every scenario is read-only: nothing issues a
-certificate, writes dns or uploads material, so the suite spends no acme or godaddy quota however
-often it runs.
 
 ## 0.3.6
 
-Distinguish a failed edge check from a stale edge, so a probe that cannot connect no longer alerts as
-drift or renders as "never rotated". Record the issued serial when a rotation fails at or after upload,
-retry a rotation whose acme authorization is still valid, validate certificate registrations, and reject
-an unrecognized acmeServer instead of registering a second acme account against it.
+Distinguish a failed edge check from a stale edge
 
 ## 0.3.5
 
