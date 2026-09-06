@@ -1,3 +1,8 @@
+## 0.6.0
+
+Take the header bar that reads the session from the auth library, so the bar and the
+page agree about who is signed in and Login and Logout go through the handoff.
+
 ## 0.5.0
 
 Move authentication onto micronaut-ui-auth and @trevorism/ui-auth, so the app receives

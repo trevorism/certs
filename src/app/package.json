@@ -16,7 +16,8 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
-    "@trevorism/ui-auth": "^1.0.0",
+    "@trevorism/ui-auth": "^1.1.0",
+    "@trevorism/ui-header-bar": "^6.0.0",
     "axios": "^1.20.0",
     "vue": "^3.5.42",
     "vue-router": "^5.3.1",
@@ -25,7 +26,6 @@
   },
   "devDependencies": {
     "@rushstack/eslint-patch": "^1.16.1",
-    "@trevorism/ui-header-bar": "^5.3.0",
     "@trevorism/vitest-test-result-events": "^2.0.0",
     "@vitejs/plugin-vue": "^6.0.8",
     "@vue/eslint-config-prettier": "^10.2.0",
