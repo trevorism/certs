@@ -26,6 +26,10 @@ Then(~/^the request is allowed$/) { ->
     assert body
 }
 
+Then(~/^the response reports no session$/) { ->
+    assert body?.contains('"authenticated":false'), "expected a signed out session, got: ${body}"
+}
+
 Then(~/^the response body is "(.*)"$/) { String expected ->
     assert !rejected, "a publicly available endpoint rejected an anonymous caller"
     assert body?.trim() == expected

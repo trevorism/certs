@@ -10,16 +10,12 @@ import {
   outcomeColor,
   sortCertificates
 } from '../utils/certStatus.js'
-import {
-  isLoggedIn,
-  looksLikeAdministrator,
-  redirectToLogin,
-  isUnauthorized,
-  isForbidden
-} from '../utils/auth.js'
+import { useAuth } from '@trevorism/ui-auth'
 
-const redirecting = ref(false)
-const administrator = ref(looksLikeAdministrator())
+const { isAdmin, isAuthenticated, ready, login } = useAuth()
+
+const signedOut = ref(false)
+const administrator = isAdmin
 const certificates = ref([])
 const verifications = ref({})
 const loading = ref(true)
@@ -55,8 +51,6 @@ const sortSummary = computed(() => {
   return `Sorted by ${column.label.toLowerCase()}, ${order}`
 })
 
-const currentUrl = computed(() => (typeof window === 'undefined' ? '' : window.location.href))
-
 function toggleSort(key) {
   if (sortKey.value !== key) {
     sortKey.value = key
@@ -81,11 +75,18 @@ function sortIndicator(key) {
   return sortDirection.value === 'asc' ? '↑' : '↓'
 }
 
-function goToLogin() {
-  redirecting.value = true
+function isUnauthorized(e) {
+  return e?.response?.status === 401
+}
+
+function isForbidden(e) {
+  return e?.response?.status === 403
+}
+
+function showSignedOut() {
+  signedOut.value = true
   loading.value = false
   error.value = ''
-  redirectToLogin(currentUrl.value)
 }
 
 async function load() {
@@ -97,7 +98,7 @@ async function load() {
     verifyAll()
   } catch (e) {
     if (isUnauthorized(e)) {
-      goToLogin()
+      showSignedOut()
       return
     }
     error.value = isForbidden(e)
@@ -119,7 +120,7 @@ function verifyAll() {
       })
       .catch((e) => {
         if (isUnauthorized(e)) {
-          goToLogin()
+          showSignedOut()
           return
         }
         recordVerification(batch, certificate.id, {
@@ -148,7 +149,7 @@ async function rotate() {
     await load()
   } catch (e) {
     if (isUnauthorized(e)) {
-      goToLogin()
+      showSignedOut()
       return
     }
     error.value = isForbidden(e)
@@ -163,9 +164,10 @@ function daysFor(certificate) {
   return daysRemaining(certificate.notAfter)
 }
 
-onMounted(() => {
-  if (!isLoggedIn()) {
-    goToLogin()
+onMounted(async () => {
+  await ready
+  if (!isAuthenticated.value) {
+    showSignedOut()
     return
   }
   load()
@@ -177,14 +179,17 @@ onMounted(() => {
     <div class="cert-table__header">
       <div>
         <h2 class="cert-table__title">Wildcard certificates</h2>
-        <p v-if="!redirecting" class="cert-table__caption">{{ sortSummary }}</p>
+        <p v-if="!signedOut" class="cert-table__caption">{{ sortSummary }}</p>
       </div>
-      <va-button v-if="!redirecting" preset="secondary" :disabled="loading" @click="load">
+      <va-button v-if="!signedOut" preset="secondary" :disabled="loading" @click="load">
         Refresh
       </va-button>
     </div>
 
-    <p v-if="redirecting" class="signing-in">Redirecting to sign in…</p>
+    <div v-if="signedOut" class="signing-in">
+      <p>Sign in to see the wildcard certificates Trevorism manages.</p>
+      <va-button class="mt-4" @click="login()">Sign in</va-button>
+    </div>
 
     <template v-else>
     <va-alert v-if="error" color="danger" class="mb-4">{{ error }}</va-alert>

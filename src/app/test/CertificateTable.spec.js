@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import CertificateTable from '../src/components/CertificateTable.vue'
-import { redirectToLogin } from '../src/utils/auth.js'
+
 
 const CERTIFICATES = [
   {
@@ -29,10 +29,20 @@ const state = vi.hoisted(() => ({
   certificates: []
 }))
 
-vi.mock('../src/utils/auth.js', async (importOriginal) => ({
-  ...(await importOriginal()),
-  redirectToLogin: vi.fn()
-}))
+const auth = vi.hoisted(() => ({ session: null, login: vi.fn() }))
+
+vi.mock('@trevorism/ui-auth', async () => {
+  const { reactive, computed } = await import('vue')
+  auth.session = reactive({ admin: true, authenticated: true })
+  return {
+    useAuth: () => ({
+      isAdmin: computed(() => auth.session.admin),
+      isAuthenticated: computed(() => auth.session.authenticated),
+      ready: Promise.resolve(),
+      login: auth.login
+    })
+  }
+})
 
 vi.mock('axios', () => ({
   default: {
@@ -65,13 +75,13 @@ const stubs = {
 }
 
 function signIn({ admin = true } = {}) {
-  document.cookie = 'user_name=tbrooks'
-  document.cookie = `admin=${admin}`
+  auth.session.authenticated = true
+  auth.session.admin = admin
 }
 
 function signOut() {
-  document.cookie = 'user_name=; Max-Age=0'
-  document.cookie = 'admin=; Max-Age=0'
+  auth.session.authenticated = false
+  auth.session.admin = false
 }
 
 async function mountTable() {
@@ -98,7 +108,7 @@ describe('CertificateTable', () => {
     state.deferVerify = false
     state.pendingVerify = []
     state.certificates = CERTIFICATES
-    redirectToLogin.mockClear()
+    auth.login.mockClear()
     signIn()
   })
 
@@ -139,14 +149,13 @@ describe('CertificateTable', () => {
     const wrapper = await mountTable()
     expect(wrapper.find('.alert').text()).toContain('Unable to load certificates')
     expect(wrapper.findAll('tbody tr')).toHaveLength(0)
-    expect(redirectToLogin).not.toHaveBeenCalled()
+    expect(wrapper.text()).not.toContain('Sign in to see')
   })
 
-  it('sends an expired session to login instead of showing the table', async () => {
+  it('offers a way back in when the session could not be refreshed', async () => {
     state.failList = true
     const wrapper = await mountTable()
-    expect(redirectToLogin).toHaveBeenCalledTimes(1)
-    expect(wrapper.text()).toContain('Redirecting to sign in')
+    expect(wrapper.text()).toContain('Sign in to see')
     expect(wrapper.find('.alert').exists()).toBe(false)
     expect(wrapper.findAll('tbody tr')).toHaveLength(0)
   })
@@ -155,19 +164,39 @@ describe('CertificateTable', () => {
     state.failList = true
     state.failStatus = 403
     const wrapper = await mountTable()
-    expect(redirectToLogin).not.toHaveBeenCalled()
+    expect(wrapper.text()).not.toContain('Sign in to see')
     expect(wrapper.find('.alert').text()).toContain('does not have access')
   })
 
-  it('sends a signed out visitor to login and never calls the api', async () => {
+  it('shows a signed out visitor the sign in page and never calls the api', async () => {
     signOut()
     const axios = (await import('axios')).default
     axios.get.mockClear()
     const wrapper = await mountTable()
-    expect(redirectToLogin).toHaveBeenCalledTimes(1)
-    expect(wrapper.text()).toContain('Redirecting to sign in')
+    expect(wrapper.text()).toContain('Sign in to see')
     expect(wrapper.findAll('tbody tr')).toHaveLength(0)
     expect(axios.get).not.toHaveBeenCalled()
+    expect(auth.login).not.toHaveBeenCalled()
+  })
+
+  it('starts the login handoff when the visitor clicks sign in', async () => {
+    signOut()
+    const wrapper = await mountTable()
+
+    await wrapper.findAll('button').find((button) => button.text() === 'Sign in').trigger('click')
+
+    expect(auth.login).toHaveBeenCalledTimes(1)
+  })
+
+  it('reveals the rotate button when the session becomes an administrator', async () => {
+    signIn({ admin: false })
+    const wrapper = await mountTable()
+    expect(wrapper.text()).not.toContain('Rotate')
+
+    auth.session.admin = true
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Rotate')
   })
 
   it('hides the rotate button from a non administrator', async () => {
