@@ -21,6 +21,11 @@ Feature: Security
     When I GET "api" anonymously
     Then the request is allowed
 
+  Scenario: The session endpoint answers an anonymous caller instead of rejecting it
+    When I GET "api/auth/session" anonymously
+    Then the request is allowed
+    And the response reports no session
+
   Scenario: Listing managed certificates requires authentication
     When I GET "api/certificate" anonymously
     Then the request is rejected

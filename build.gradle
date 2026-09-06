@@ -62,6 +62,7 @@ dependencies {
     runtimeOnly("ch.qos.logback:logback-classic")
 
     implementation 'com.trevorism:micronaut-utility-beans:2.1.1'
+    implementation 'com.trevorism:micronaut-ui-auth:1.0.1'
     implementation 'com.trevorism:datastore-client:4.2.1'
     implementation 'com.trevorism:reactions-client:0.6.0'
     implementation 'com.google.code.gson:gson:2.14.0'

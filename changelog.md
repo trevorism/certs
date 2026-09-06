@@ -1,3 +1,8 @@
+## 0.5.0
+
+Move authentication onto micronaut-ui-auth and @trevorism/ui-auth, so the app receives
+its own login on its own host instead of reading cookies the login app set.
+
 ## 0.4.0
 
 Modify the urgent constant to be 15 days, grace period for checking cert propagation to 25 hours.
