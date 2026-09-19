@@ -128,7 +128,7 @@ class DefaultCertificateSweepServiceTest {
     @Test
     void testProjectIsNeverChosenWhileAnythingElseIsDue() {
         expiryByProject["trevorism-project"] = daysOut(1)
-        expiryByProject["trevorism-draw"] = daysOut(29)
+        expiryByProject["trevorism-draw"] = daysOut(19)
         service.sweep()
         assertEquals(["2"], rotated, "project hosts godaddy, github and certs, so it must rotate last")
     }

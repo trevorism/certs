@@ -18,8 +18,8 @@ import java.time.temporal.ChronoUnit
 @Singleton
 class DefaultCertificateSweepService implements CertificateSweepService {
 
-    static final int MIN_DAYS_REMAINING = 30
-    static final int URGENT_DAYS_REMAINING = 15
+    static final int MIN_DAYS_REMAINING = 24
+    static final int URGENT_DAYS_REMAINING = 12
     static final int DRIFT_GRACE_HOURS = 25
     static final String LAST_CATEGORY = "project"
 

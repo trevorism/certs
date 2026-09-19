@@ -1,3 +1,7 @@
+## 0.6.1
+
+Update dependencies and adjust rotation cutoffs.
+
 ## 0.6.0
 
 Take the header bar that reads the session from the auth library, so the bar and the

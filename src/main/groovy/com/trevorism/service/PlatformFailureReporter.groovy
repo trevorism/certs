@@ -20,7 +20,7 @@ class PlatformFailureReporter implements FailureReporter {
     private AlertClient alertClient = new AlertClient(new AppClientSecureHttpClient())
 
     @Override
-    void report(String message, Map details) {
+    void  report(String message, Map details) {
         Map<String, String> coerced = asStrings(details)
         recordInLedger(message, coerced)
         raiseAlert(message, coerced)
