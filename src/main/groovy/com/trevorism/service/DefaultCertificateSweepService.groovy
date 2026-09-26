@@ -52,7 +52,7 @@ class DefaultCertificateSweepService implements CertificateSweepService {
         if (due) {
             rotateMostUrgent(due, result)
         } else {
-            result.notes << "no certificate is inside the ${MIN_DAYS_REMAINING} day renewal window"
+            result.addNote("no certificate is inside the ${MIN_DAYS_REMAINING} day renewal window")
         }
 
         verifyEdge(result.rotatedCertificateId ? listEnabled() : enabled, result)
@@ -77,7 +77,7 @@ class DefaultCertificateSweepService implements CertificateSweepService {
             } catch (Exception e) {
                 String note = "unable to read the expiry of ${certificate.wildcard}: ${e.message}"
                 log.warn(note)
-                result.notes << note
+                result.addNote(note)
                 failureReporter.report("Cannot read the expiry of ${certificate.wildcard}", [
                         wildcard     : certificate.wildcard,
                         gcpProject   : certificate.gcpProject,
@@ -108,7 +108,7 @@ class DefaultCertificateSweepService implements CertificateSweepService {
             return
         }
         long daysLeft = Duration.between(Instant.now(), expiry).toDays()
-        result.notes << "${certificate.wildcard} expires in ${daysLeft} days"
+        result.addNote("${certificate.wildcard} expires in ${daysLeft} days")
         failureReporter.report("Certificate ${certificate.wildcard} expires in ${daysLeft} days", [
                 wildcard   : certificate.wildcard,
                 gcpProject : certificate.gcpProject,
@@ -128,7 +128,7 @@ class DefaultCertificateSweepService implements CertificateSweepService {
             result.rotationOutcome = run.outcome
         } catch (Exception e) {
             result.rotationOutcome = "FAILED"
-            result.notes << "rotation of ${target.wildcard} could not start: ${e.message}"
+            result.addNote("rotation of ${target.wildcard} could not start: ${e.message}")
             failureReporter.report("Certificate rotation could not start for ${target.wildcard}", [
                     wildcard     : target.wildcard,
                     certificateId: target.id,
@@ -143,7 +143,7 @@ class DefaultCertificateSweepService implements CertificateSweepService {
             } catch (Exception e) {
                 String note = "unable to verify the edge for ${certificate.wildcard}: ${e.message}"
                 log.warn(note)
-                result.notes << note
+                result.addNote(note)
                 failureReporter.report("Cannot verify the edge for ${certificate.wildcard}", [
                         wildcard : certificate.wildcard,
                         probeHost: certificate.probeHost,

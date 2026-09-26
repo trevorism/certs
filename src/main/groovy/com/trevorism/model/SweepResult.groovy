@@ -12,4 +12,8 @@ class SweepResult {
     String rotationOutcome
     List<CertificateVerification> verifications = []
     List<String> notes = []
+
+    void addNote(String note) {
+        notes << note
+    }
 }

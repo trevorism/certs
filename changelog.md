@@ -1,3 +1,7 @@
+## 0.7.0
+
+Found a bug where gstrings were being used in sweep when strings were expected
+
 ## 0.6.1
 
 Update dependencies and adjust rotation cutoffs.
