@@ -8,6 +8,7 @@ import com.trevorism.model.RotationRun
 import com.trevorism.model.SweepResult
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import tools.jackson.databind.json.JsonMapper
 
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -242,5 +243,24 @@ class DefaultCertificateSweepServiceTest {
         assertEquals("COMPLETED", result.rotationOutcome)
         assertEquals("run-2", result.rotationRunId)
         assertNull(result.notes.find { it.contains("could not start") })
+    }
+
+    @Test
+    void testASweepWithNothingDueSerializesToJson() {
+        String json = JsonMapper.builder().build().writeValueAsString(service.sweep())
+        assertTrue(json.contains("renewal window"))
+    }
+
+    @Test
+    void testASweepWithAnImminentExpiryAndAFailedRotationSerializesToJson() {
+        expiryByProject["trevorism-draw"] = daysOut(5)
+        service.certificateRotationService = [
+                rotate: { String id, RotationRequest request -> throw new IllegalStateException("acme down") }
+        ] as CertificateRotationService
+        SweepResult result = service.sweep()
+        String json = JsonMapper.builder().build().writeValueAsString(result)
+        assertEquals("FAILED", result.rotationOutcome)
+        assertTrue(json.contains("expires in"))
+        assertTrue(json.contains("could not start: acme down"))
     }
 }
